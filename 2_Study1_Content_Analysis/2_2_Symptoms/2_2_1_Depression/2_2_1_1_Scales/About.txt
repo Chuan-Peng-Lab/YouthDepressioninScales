@@ -1,0 +1,16 @@
+参考文献及量表在OUTPUT文件夹中
+OUTPUT\Haoyuan
+量表题目在Scales_.docx中，心理卫生评定量表手册未找到原始pdf
+OUTPUT\Liuqing
+量表题目在Scales_xlsx中，量表开发文献在Papers中
+OUTPUT\Weibiao
+量表题目在Scales文件夹中，量表开发文献在Papers中，缺失ADI和WHO-CIDI
+OUTPUT\Mengzhen
+量表题目在Scales文件夹中，量表开发文献在Papers中
+
+Depression_Raw_Data1.xlsx
+整理出来的，每个抑郁量表所包含的题目
+Raw_Data.xlsx
+包含所有症状，及其涉及文献的总表
+Task1_Assignment.docx
+任务1的分配情况

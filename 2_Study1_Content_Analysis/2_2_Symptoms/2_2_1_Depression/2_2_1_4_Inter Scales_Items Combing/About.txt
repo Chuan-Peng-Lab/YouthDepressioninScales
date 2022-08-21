@@ -1,0 +1,10 @@
+_Reference Material
+	包含了Eiko Fried的结果，作为参考
+First Trial
+	第一次尝试，进行了包含五个量表 
+	MFQ-C、cdi、sds、ces-d儿童版、汉密尔顿抑郁量表（HAMD）
+	的内容分析——将量表间相同症状的题目归为一行
+Second Trial
+	第二次尝试，进行了包含六个量表 
+	dsi、bdi-II、ces-d、ces-d简版、中学生抑郁量表（cssds）、dsrsc
+	的内容分析——将量表间相同症状的题目归为一行
