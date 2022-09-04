@@ -28,12 +28,12 @@
 |---------------------------OUTPUT
 |---------------------------Depression_Raw_Data2(coded).xlsx
 |---------------------------Task2_Assignment.docx
-|------------------2_2_1_3_Inner Scales_Items Combing
+|------------------2_2_1_3_Inner Scales_Items Combining
 |---------------------------About.txt
 |---------------------------OUTPUT
 |---------------------------Depression_Raw_Data3(coded & combined).xlsx
 |---------------------------Task3_Assignment.docx
-|------------------2_2_1_4_Inter Scales_Items Combing
+|------------------2_2_1_4_Inter Scales_Items Combining
 |---------------------------About.txt
 |---------------------------2_2_1_4_0_Reference Material
 |---------------------------------------Eiko Fried_SupplementaryMaterials
