@@ -1,12 +1,12 @@
 参考文献及量表在OUTPUT文件夹中
 OUTPUT\Haoyuan
-量表题目在Scales_.docx中，心理卫生评定量表手册未找到原始pdf
+量表题目在Scales_.docx中，量表开发文献在Papers中，DIS截取自心理卫生评定量表手册
 OUTPUT\Liuqing
-量表题目在Scales_xlsx中，量表开发文献在Papers中
-OUTPUT\Weibiao
-量表题目在Scales文件夹中，量表开发文献在Papers中，缺失ADI和WHO-CIDI
+量表题目在Scales_xlsx中，量表开发文献在Papers中，Mini-KID分为儿童自我报告版和其家长评价版
 OUTPUT\Mengzhen
-量表题目在Scales文件夹中，量表开发文献在Papers中
+量表题目在Scales文件夹中，量表开发文献在Papers中，中国青少年健康相关危险行为调查问卷(初中) 仅一道题，且出处未知
+OUTPUT\Weibiao
+量表题目在Scales文件夹中，量表开发文献在Papers中，缺失ADI和WHO-CIDI，Gu jiayi的自编量表仅一题
 
 Depression_Raw_Data1.xlsx
 整理出来的，每个抑郁量表所包含的题目
