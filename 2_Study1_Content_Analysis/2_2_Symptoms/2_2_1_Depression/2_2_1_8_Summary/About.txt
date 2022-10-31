@@ -1,0 +1,9 @@
+data
+	包含了之前得到的Depression_Symptom_MatrixA
+	转换列的顺序，去除格式信息后得到depression_matrix_a
+OUTPUT
+	包含了画好的内容分析图
+R_code
+	为画图的代码
+Depression_ Content analysis_work summary.docx
+	将方法部分总结成文
