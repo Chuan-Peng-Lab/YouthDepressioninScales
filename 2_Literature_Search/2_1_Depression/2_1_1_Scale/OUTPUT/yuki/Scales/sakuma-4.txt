@@ -1,9 +1,0 @@
-1.“Have you felt depressed in the last week?”
-
-2.“Have you felt alone in the last week?”
-
-3.“Have you felt sad in the last week?”
-
-4.“Have you felt like crying out in the last week?”
-
-4点评分（0 1 2 3）
