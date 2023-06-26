@@ -10,3 +10,7 @@
 	对每个量表下的题目所属的症状进行编码，哪些属于复合症状，哪些属于特殊症状
 4_2_1_6_Inner Scales_Items Combining_DC
 	重新对4_2_1_2_Inner Scales_Items Combining进行double check，检查之前所做有没有不合理的地方
+4_2_1_7_Literature_Search
+        对于meta分析所涉及到的全部文章进行编号、下载，并填充数据记录表。按照与PPT一致的方式收集整理问卷。
+4_2_1_8_Inner Scales_Items Combining
+        使用4_2_1_7_Literature_Search的结果进行内容分析，即将能够归类到同一个内容的题项放在同一行。
