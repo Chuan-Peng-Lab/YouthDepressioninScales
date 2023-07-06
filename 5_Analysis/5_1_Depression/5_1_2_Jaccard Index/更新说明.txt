@@ -1,0 +1,2 @@
+2023.7.6更新了新的jaccard_index
+热力图.csv是在Jaccard_Index_n1基础上合并了gu跟ji之后用来做热力图的数据。
