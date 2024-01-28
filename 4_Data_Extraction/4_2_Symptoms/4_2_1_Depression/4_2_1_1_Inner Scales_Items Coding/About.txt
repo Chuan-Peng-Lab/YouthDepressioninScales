@@ -1,9 +1,0 @@
-OUTPUT\Haoyuan&Liuqing
-	包含了Haoyuan和Liuqing的结果
-OUTPUT\Mengzhen&Weibiao
-	包含了Mengzhen和Weibiao的结果
-
-Depression_Raw_Data2(coded).xlsx
-	四个人，亮亮将题目编码为症状后的汇总文件
-Task2_Assignment.docx
-	任务2的分配情况
