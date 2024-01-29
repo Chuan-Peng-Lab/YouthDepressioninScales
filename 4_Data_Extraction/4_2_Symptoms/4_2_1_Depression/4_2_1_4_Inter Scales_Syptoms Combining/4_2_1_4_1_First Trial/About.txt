@@ -1,4 +1,0 @@
-OUTPUT
-	Haoyuan和Mengzhen将可以合并的症状进行合并
-Depression_Raw_Data5-1(Combining Symptoms).xlsx
-	最终四个人都同意的结果

@@ -1,8 +1,0 @@
-OUTPUT\
-	包含四个人分别进行量表间相同症状合并的结果，以及四个人统一后的结果
-Depression_Raw_Data4-1(MFQ-C__HAMD).xlsx
-	包含五个量表
-	MFQ-C、cdi、sds、ces-d儿童版、汉密尔顿抑郁量表（HAMD）
-	的量表间合并症状结果
-Task4-1_Assignment.docx
-	任务4-1的分配情况
