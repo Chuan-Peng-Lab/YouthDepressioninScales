@@ -1,0 +1,20 @@
+4_2_1_4_0_Reference Material
+	包含了Eiko Fried的结果，作为参考
+4_2_1_4_1_First Trial
+	第一次尝试，进行了包含五个量表 
+	MFQ-C、cdi、sds、ces-d儿童版、汉密尔顿抑郁量表（HAMD）
+	的内容分析——将量表间相同症状的题目归为一行
+4_2_1_4_2_Second Trial
+	第二次尝试，进行了包含六个量表 
+	dsi、bdi-II、ces-d、ces-d简版、中学生抑郁量表（cssds）、dsrsc
+	的内容分析——将量表间相同症状的题目归为一行
+4_2_1_4_3_Third Trial
+	包含了对于first trial和second trial的11个量表的校验。
+	并且重新对症状的顺序进行了排序，将相似的症状放在的临近的行
+4_2_1_4_4_Fourth Trial
+	包含了余下所有量表
+	CBCL-1991、CBCL-2001、SMFQ、SCL-90、Andrensen（1994）简式抑郁量表、PHQ-9、
+	医院焦虑与抑郁量表HAHD、Kutcher青少年抑郁量表﻿（KADS-11）、DASS-21、中学生心理健康量表（MSSMHS）王极盛、
+	简明症状评定量表（BSRS-5）、抑郁自编量表 sakuma2010、中国教育小组调查量表（CEPS）、﻿
+	中国青少年健康相关 危险行为调查问卷(初中)、抑郁自编题目Jiayi Gu 2020
+	的内容分析——将量表间相同症状的题目归为一行

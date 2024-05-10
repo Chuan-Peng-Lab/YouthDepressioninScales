@@ -1,0 +1,8 @@
+OUTPUT\
+	包含四个人分别进行量表间相同症状合并的结果，以及四个人统一后的结果
+Depression_Raw_Data4-2(DSI__DSRSC).xlsx
+	包含六个量表
+	dsi、bdi-II、ces-d、ces-d简版、中学生抑郁量表（cssds）、dsrsc
+	的量表间合并症状结果
+Task4-2_Assignment.docx
+	任务4-2的分配情况
