@@ -147,10 +147,26 @@
 |------------R_code
 |------------data
 |------------OUTPUT
+|------------更新说明.txt
+|-------5_1_3_Supplementary materials
+|------------README.txt
+|------------1.1The results of Identify and screen scales.docx
+|------------2.Depression_Symptom5.6.xlsx
+|------------3.Combined results of items in the scale.docx
+|------------4.Compound symptoms and the specific symptoms they contain.docx
+|------------5.Characteristics of the scales.docx
+|------------大规模调查.docx
+|------------文章数计算.xlsx
+|-------5_1_4_Other plot and data
+
 
 |---6_Reports
 |-------README.txt
 |-------6_1_Depression
-|------------Content Analysis_Depression_Method.docx
-|------------Content Analysis_Depression_Question.docx
+|------------About.txt
+|------------Method&Result&Introduction
+|------------Question&Reply
 |------------MH_23_1.13.pptx
+|------------MH_23_7.6.pptx
+|------------MH_24_1.21.pptx
+|------------MH_24_6.25.pptx
