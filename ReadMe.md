@@ -1,6 +1,23 @@
-- This project is about folder structure [short description of the study]
+# Heterogeneity of Chinense Mental Health Scales
+This project is about heterogeneity of scales that used for measuring mental health problems among children and adolescents in China
 
-- A description of the folder structure
+## Contributors:
+- [Haoyuan Wang]
+- [Mengzhen Hu]
+- [Liuqing Tian]
+- [Weibiao Liu]
+- [Hu Chuan-Peng]
+
+
+## Structure of the project
+- Sub-project 1: depression
+- Sub-project 2: anxiety
+- ...
+
+
+## A description of the folder structure
+
+```
 |-root_dir
 |---1_General_Protocol
 |-------About_Protocol.txt
@@ -170,3 +187,4 @@
 |------------MH_23_7.6.pptx
 |------------MH_24_1.21.pptx
 |------------MH_24_6.25.pptx
+```
