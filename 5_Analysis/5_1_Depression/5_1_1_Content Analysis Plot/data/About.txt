@@ -1,2 +1,0 @@
-depression_matrix_a完全等同于Depression_Symptom_MatrixA
-区别仅仅是调换了列的顺序，符合画图代码所要求的格式
