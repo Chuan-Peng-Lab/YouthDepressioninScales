@@ -1,5 +1,0 @@
-2023.7.6更新了新的jaccard_index
-热力图.csv是在Jaccard_Index_n1基础上合并了gu跟ji之后用来做热力图的数据。
-2023.8.31基于与医生的讨论，使用Depression_Symptom5.2更新了新的jaccard_index和热力图
-2023.10.19使用的是Depression_Symptom5.4更新了热力图，以及jaccard数据，文件为n3
-Jaccard_Index_ratio_meanoverlap 使用n3数据做出的meanoverlap
