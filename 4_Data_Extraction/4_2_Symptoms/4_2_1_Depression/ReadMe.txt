@@ -12,3 +12,7 @@
 	重新对4_2_1_2_Inner Scales_Items Combining进行double check，检查之前所做有没有不合理的地方
 4_2_1_7_Inner Scales_Items Combining
         使用4_2_1_7_Literature_Search的结果进行内容分析，即将能够归类到同一个内容的题项放在同一行。
+4_2_1_8_问卷类型&症状群
+        判断问卷是诊断类还是筛查类，以及判断抑郁症状可以分为几个症状群。
+4_2_1_9_Measurement data
+        抑郁的实证数据文件。
