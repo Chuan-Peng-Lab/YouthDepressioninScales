@@ -1,0 +1,36 @@
+label,frequency,symptoms,color
+SDS,129,26,1
+SCL-90,113,12,1
+CES-D,65,19,1
+CDI,22,32,1
+DSRSC,15,21,1
+BDI-I,17,20,1
+MSSMHS,15,6,1
+BDI-II,10,23,1
+PHQ-9,11,19,1
+DASS-21,9,7,1
+CBCL_boy,6,23,1
+CBCL_girl,6,24,1
+MFQ-C,3,26,1
+CSSSDS,3,18,1
+CES-D-C,2,16,1
+ADI,1,35,1
+BSRS,1,7,1
+CES-D-13,2,10,1
+CEPS,1,4,1
+DSI,1,29,1
+HADS,1,4,1
+HAMD,1,32,1
+Ji_2007,1,2,1
+KADS-11,1,20,1
+Sakuma_2010,1,7,1
+SMFQ,1,13,1
+UPI,1,15,1
+CCSMHS,1,10,1
+Mini-KID*,2,3,0
+WHO-CIDI 3.0*,1,3,0
+PHI*,1,26,0
+SCL-45*,1,6,0
+"BDI, Zhang Revised Edition*",1,21,0
+Short Depression Scale*,1,10,0
+Gu_2020*,1,1,0
