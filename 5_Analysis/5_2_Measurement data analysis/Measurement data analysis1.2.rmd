@@ -125,6 +125,7 @@ p <- ggcorrplot(correlation_matrix, lab = TRUE,
 ggsave(here::here("output", "correlation_heatmap.png"), 
        plot = p, width = 32, height = 28, dpi = 300)
 ```
+![反向计分前的相关分析](D:/心理健康测量/MH_CPL/5_Analysis/5_2_Measurement data analysis/output/correlation_heatmap.png)
 
 
 ```{r}
@@ -180,7 +181,7 @@ p_reversed <- ggcorrplot(correlation_matrix_reversed, lab = TRUE,
 ggsave(here::here("output", "correlation_heatmap_reversed.png"), 
        plot = p_reversed, width = 32, height = 28, dpi = 300)
 ```
-
+![反向计分后的相关分析](D:/心理健康测量/MH_CPL/5_Analysis/5_2_Measurement data analysis/output/correlation_heatmap_reversed.png)
 ```{r}
 # 使用BOOT法计算DSRSC 2和14、10和12的区间，并且比较其他相关系数的区间。
 
