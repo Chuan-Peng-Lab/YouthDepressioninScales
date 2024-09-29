@@ -4,3 +4,7 @@
 *.zip
 
 
+.Rproj.user
+
+# ignore MacOS generated temp file:
+._*
