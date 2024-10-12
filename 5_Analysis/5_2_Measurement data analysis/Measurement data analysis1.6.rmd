@@ -1,0 +1,620 @@
+---
+title: "实证数据分析"
+author: "why"
+date: "2024.9.5"
+output: html_document
+---
+```{r}
+# 数据处理完整思路
+# 1：载入需要的数据。原始数据中除抑郁问卷外，还包括焦虑问卷，因此只载入测量抑郁的问卷，及人口学信息。具体为DSRSC、CDI、PHQ-9、和DASS-21中测量抑郁的题目。
+# 2：转换数据为数值型。
+# 3：处理缺失值（实际没有缺失值）。
+# 4：原始数据-1，用以方便计算检出率。原始数据的范围与量表正常的数据范围是不一致的。例如：DSRSC量表的计分范围正常应该为0-2，检出率为≥15。但咱们收到的原始数据计分范围就是1-3，也就是所有数值都+了1。因此-1后才能计算正确的检出率。
+# 5：描述统计，原始数据的年龄范围显示为0-29岁，因此参考李医生的建议，筛除了7岁以下和18岁以上的人。
+# 计算了1、性别比例。2、年龄范围。
+# 6：数据质量检查。首先，使用原始数据进行了相关分析，用以检查数据。
+# 发现问题：1、DSRSC问卷内相关有正有负。2、CDI问卷内相关有正有负。因此，数据应该进行反向计分，与李医生讨论过确实需要进行反向计分。
+# 7：反向计分，以及反向计分后的相关分析。
+
+# 上为数据预处理，下面开始正式检验。
+
+# 8: 我们对问卷内部的题目进行了合并，并且在跨问卷中认为一些题目是测量同一症状的。
+# 因此，这些特定题目之间的相关，应该高于其他题目的相关。
+# 对此，我们对特定题目的相关系数和其他题目的相关系数进行了Z检验。
+# 大部分特定题目的相关系数是高于其他的，详细结果见8及8.1。
+
+
+# 9：我们认为儿童青少年不同问卷之间的检出率应该有差异。因此进行了检出率计算。
+# 结果显示：CDI的检出率为49.25，DSRSC的检出率为52.12.PHQ-9的检出率为53.46.
+
+
+# 10：我们使用实证数据探索网络结构，因此进行了网络分析。
+# 第一步，我们制作了网络结构图。第二步，我们计算了中心指标。第三步，我们对网络分析的准确性进行了检验。具体又分为（1）计算边线的Bootstrap置信区间（2）检验节点或边线之间的差异（3）检验节点在中心指标的稳定性
+# 结果详见FIGURE文件夹。
+# 注：其中（2）检验节点或边线之间的差异代码应该没什么问题，但是要比较的数量太多了，我的电脑无法正常处理。
+
+
+
+
+
+# 载入必要的包
+library(here)
+library(bruceR)
+library(tidyverse)
+library(openxlsx)
+library(ggcorrplot)
+
+#1.载入数据
+raw_data <- bruceR::import(here::here("data", "Rawdata1.xlsx"))
+
+#筛选与抑郁有关的数据
+selected_data <- raw_data %>%
+  select(就诊卡号, 性别, 年龄, 
+         DSRSC1:DSRSC18, 
+         PHQ1:PHQ9, 
+         DASS3, DASS5, DASS10, DASS13, DASS16, DASS17, DASS21, 
+         CDI1:CDI27)
+
+#2.转换数据类型
+selected_data_numeric <- selected_data %>%
+  mutate(性别 = factor(性别, levels = c("男", "女"), labels = c(1, 2))) %>%
+  mutate(across(matches("性别|年龄|DSRSC|PHQ|DASS|CDI"), as.numeric))
+
+#3.处理缺失值
+clean_data <- selected_data_numeric %>%
+  drop_na()
+
+#4.原始数据-1，用以方便计算检出率
+transformed_data <- clean_data %>%
+  mutate(across(matches("DSRSC|PHQ|DASS|CDI"), ~ .x - 1))
+
+#5.筛选出年龄在7岁以上且不超过18岁的数据
+filtered_data <- transformed_data %>%
+  filter(年龄 >= 7 & 年龄 <= 18)
+
+# 描述统计
+# 计算性别比例
+gender_proportion <- filtered_data %>%
+  summarise(
+    male = sum(性别 == 1, na.rm = TRUE),
+    female = sum(性别 == 2, na.rm = TRUE),
+    total = n(),
+    male_proportion = male / total * 100,
+    female_proportion = female / total * 100
+  )
+
+# 打印性别比例
+print(gender_proportion)
+
+# 计算年龄的范围
+age_range <- filtered_data %>%
+  summarise(
+    min_age = min(年龄, na.rm = TRUE),
+    max_age = max(年龄, na.rm = TRUE)
+  )
+
+# 打印年龄范围
+print(age_range)
+
+# 检查并创建输出目录
+output_dir <- here::here("output")
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir)
+}
+```
+
+```{r}
+# 6.数据质量检查，反向计分前的相关分析
+correlation_matrix <- filtered_data %>%
+  select(matches("DSRSC|PHQ|DASS|CDI")) %>%
+  cor()
+
+# 导出
+output_file <- here::here("output", "correlation_matrix.xlsx")
+write.xlsx(correlation_matrix, output_file)
+
+# 可视化
+p <- ggcorrplot(correlation_matrix, lab = TRUE, 
+                method = "circle", 
+                outline.color = "white", 
+                colors = c("blue", "white", "red"), 
+                ggtheme = ggplot2::theme_minimal(base_family = "sans"), 
+                title = "未反向计分的相关系数") +
+  theme_minimal(base_family = "sans") + 
+  theme(
+    text = element_text(size = 20, color = "black"), 
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 14), 
+    axis.text.y = element_text(size = 14), 
+    axis.title = element_text(size = 22), 
+    plot.background = element_rect(fill = "gray90"), 
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(), 
+    panel.background = element_rect(fill = "gray90", color = NA), 
+    legend.position = "bottom", 
+    legend.key.width = unit(4, "cm"), 
+    legend.key.height = unit(1, "cm")
+  ) +
+  scale_size_continuous(range = c(5, 12)) +
+  labs(x = "", y = "")
+
+# 保存图片
+ggsave(here::here("output", "correlation_heatmap.png"), 
+       plot = p, width = 32, height = 28, dpi = 300)
+```
+
+
+```{r}
+# 7.进行反向计分
+# CDI 反向计分项目
+CDI_reverse_items <- c("CDI2", "CDI5", "CDI7", "CDI8", "CDI10", 
+                       "CDI11", "CDI13", "CDI15", "CDI16", 
+                       "CDI18", "CDI21", "CDI24", "CDI25")
+
+# DSRSC 反向计分项目
+DSRSC_reverse_items <- c("DSRSC3", "DSRSC5", "DSRSC6", "DSRSC10", 
+                         "DSRSC14", "DSRSC15", "DSRSC17", "DSRSC18")
+
+# 对CDI和DSRSC项目进行反向计分
+reversed_data <- filtered_data %>%
+  mutate(across(all_of(CDI_reverse_items), ~ 2 - .)) %>%  # 对于0-2范围，反向计分为2减去原分数
+  mutate(across(all_of(DSRSC_reverse_items), ~ 2 - .))
+
+# 计算反向计分后的相关性
+correlation_matrix_reversed <- reversed_data %>%
+  select(matches("DSRSC|PHQ|DASS|CDI")) %>%
+  cor()
+
+# 导出
+output_file_reversed <- here::here("output", "correlation_matrix_reversed.xlsx")
+write.xlsx(correlation_matrix_reversed, output_file_reversed)
+
+# 可视化
+p_reversed <- ggcorrplot(correlation_matrix_reversed, lab = TRUE, 
+                         method = "circle", 
+                         outline.color = "white", 
+                         colors = c("blue", "white", "red"), 
+                         ggtheme = ggplot2::theme_minimal(base_family = "sans"), 
+                         title = "反向计分后的相关系数") +
+  theme_minimal(base_family = "sans") + 
+  theme(
+    text = element_text(size = 20, color = "black"), 
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 14), 
+    axis.text.y = element_text(size = 14), 
+    axis.title = element_text(size = 22), 
+    plot.background = element_rect(fill = "gray90"), 
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(), 
+    panel.background = element_rect(fill = "gray90", color = NA), 
+    legend.position = "bottom", 
+    legend.key.width = unit(4, "cm"), 
+    legend.key.height = unit(1, "cm")
+  ) +
+  scale_size_continuous(range = c(5, 12)) +
+  labs(x = "", y = "")
+
+# 保存图片
+ggsave(here::here("output", "correlation_heatmap_reversed.png"), 
+       plot = p_reversed, width = 32, height = 28, dpi = 300)
+```
+
+
+```{r}
+# 8.检验问卷内部合并的症状的相关系数是否大于其他的。
+# DSRSC合并了2和14、10和12。
+# CDIQ3Q7Q24合并 Q15Q23合并。
+# 做了DSRSC和CDI每个合并的条目和其他条目（即该量表去除此条目以外的条目）的Z检验。
+
+# 定义 z_transform 函数
+z_transform <- function(r) {
+  return(0.5 * log((1 + r) / (1 - r)))  # Fisher's Z transformation
+}
+
+# 自定义函数，用于比较特定项目与其他DSRSC项目的相关系数
+compare_specific_projects <- function(cor_matrix, project1, project2) {
+  # 提取特定项目的相关系数
+  r_value <- cor_matrix[project1, project2]
+  
+  # 获取DSRSC项目的相关系数，只包括除了特定项目以外的DSRSC项目
+  other_r_values <- cor_matrix[grep("^DSRSC", rownames(cor_matrix)), 
+                                grep("^DSRSC", colnames(cor_matrix))]  # 仅选择DSRSC相关系数
+  
+  # 去除特定项目
+  other_r_values <- other_r_values[-which(rownames(other_r_values) %in% c(project1, project2)), 
+                                    -which(colnames(other_r_values) %in% c(project1, project2))]
+  
+  # 将其他相关系数展开为向量
+  other_r_values_vector <- as.vector(other_r_values)
+  
+  # 计算其他相关系数的均值和标准差
+  mean_other_r <- mean(other_r_values_vector, na.rm = TRUE)
+  
+  # 进行z检验
+  z_value <- z_transform(r_value)
+  z_mean_other <- z_transform(mean_other_r)
+  
+  # 计算标准误差
+  se <- 1 / sqrt(nrow(filtered_data) - 3)  # 样本大小
+  
+  # 计算z分数
+  z_score <- (z_value - z_mean_other) / se
+  
+  # 计算p值
+  p_value <- 2 * (1 - pnorm(abs(z_score)))
+  
+  # 返回结果
+  result <- data.frame(
+    specific_project_r = r_value,
+    mean_other_r = mean_other_r,
+    z_score = z_score,
+    p_value = round(p_value, 3)  # 保留三位小数
+  )
+  
+  return(result)
+}
+
+# 使用函数比较特定项目DSRSC2和DSRSC14
+comparison_result_2_14 <- compare_specific_projects(correlation_matrix_reversed, "DSRSC2", "DSRSC14")
+print(comparison_result_2_14)
+
+# 使用函数比较特定项目DSRSC10和DSRSC12
+comparison_result_10_12 <- compare_specific_projects(correlation_matrix_reversed, "DSRSC10", "DSRSC12")
+print(comparison_result_10_12)
+
+# 合并结果
+combined_result <- rbind(comparison_result_2_14, comparison_result_10_12)
+rownames(combined_result) <- c("DSRSC2与DSRSC14", "DSRSC10与DSRSC12")
+
+# 打印合并后的结果
+print(combined_result)
+
+
+# 自定义函数，用于比较特定项目与其他CDI项目的相关系数
+compare_specific_projects_CDI <- function(cor_matrix, project1, project2) {
+  # 提取特定项目的相关系数
+  r_value <- cor_matrix[project1, project2]
+  
+  # 获取CDI项目的相关系数，只包括除了特定项目以外的CDI项目
+  other_r_values <- cor_matrix[grep("^CDI", rownames(cor_matrix)), 
+                                grep("^CDI", colnames(cor_matrix))]  # 仅选择CDI相关系数
+  
+  # 去除特定项目
+  other_r_values <- other_r_values[-which(rownames(other_r_values) %in% c(project1, project2)), 
+                                    -which(colnames(other_r_values) %in% c(project1, project2))]
+  
+  # 将其他相关系数展开为向量
+  other_r_values_vector <- as.vector(other_r_values)
+  
+  # 计算其他相关系数的均值
+  mean_other_r <- mean(other_r_values_vector, na.rm = TRUE)
+  
+  # 进行z检验
+  z_value <- z_transform(r_value)
+  z_mean_other <- z_transform(mean_other_r)
+  
+  # 计算标准误差
+  se <- 1 / sqrt(nrow(filtered_data) - 3)  # 样本大小
+  
+  # 计算z分数
+  z_score <- (z_value - z_mean_other) / se
+  
+  # 计算p值
+  p_value <- 2 * (1 - pnorm(abs(z_score)))
+  
+  # 返回结果
+  result <- data.frame(
+    specific_project_r = r_value,
+    mean_other_r = mean_other_r,
+    z_score = z_score,
+    p_value = round(p_value, 3)  # 保留三位小数
+  )
+  
+  return(result)
+}
+
+# 使用函数比较特定项目
+comparison_result_3_24 <- compare_specific_projects_CDI(correlation_matrix_reversed, "CDI3", "CDI24")
+comparison_result_7_24 <- compare_specific_projects_CDI(correlation_matrix_reversed, "CDI7", "CDI24")
+comparison_result_3_7 <- compare_specific_projects_CDI(correlation_matrix_reversed, "CDI3", "CDI7")
+comparison_result_15_23 <- compare_specific_projects_CDI(correlation_matrix_reversed, "CDI15", "CDI23")
+
+# 合并结果
+combined_result_CDI <- rbind(comparison_result_3_24, 
+                              comparison_result_7_24, 
+                              comparison_result_3_7, 
+                              comparison_result_15_23)
+
+# 设置合并结果的行名
+rownames(combined_result_CDI) <- c("CDI3与CDI24", "CDI7与CDI24", "CDI3与CDI7", "CDI15与CDI23")
+
+# 打印合并后的结果
+print(combined_result_CDI)
+
+
+
+```
+
+
+```{r}
+# 8.1 检验问卷间测量同一个症状的相关系数是否大于其他的。
+# 测量相同症状的有 1.DSRSC16 PHQ2 2.CDI1 DSRSC17 3.CDI4 DASS3
+# 4.CDI11 DSRSC18 5.CDI20 DSRSC15 6.DSRSC11 PHQ6 7.CDI2 DSRSC1 DASS10
+# 8.CDI3 7 24  DASS17 9.DSRSC7 DASS5 10.DSRSC10 12 PHQ1 11.CDI17 PHQ4 12.CDI18 PHQ5
+# 13. CDI16 PHQ3 14.CDI12 DSRSC4 15.CDI10 DSRSC3 16.CDI9 PHQ9
+# 做了四个量表每个合并的条目的相关系数和其他条目（四个量表去除此条目以外的条目）平均相关系数的Z检验。
+
+
+
+# 自定义函数，用于比较跨量表项目的相关系数
+compare_cross_scale_projects <- function(cor_matrix, project1, project2) {
+  # 提取特定项目的相关系数
+  r_value <- cor_matrix[project1, project2]
+  
+  # 获取所有项目的相关系数
+  all_r_values <- cor_matrix
+  
+  # 去除特定项目
+  other_r_values <- all_r_values[-which(rownames(all_r_values) %in% c(project1, project2)), 
+                                  -which(colnames(all_r_values) %in% c(project1, project2))]
+  
+  # 将其他相关系数展开为向量
+  other_r_values_vector <- as.vector(other_r_values)
+  
+  # 计算其他相关系数的均值
+  mean_other_r <- mean(other_r_values_vector, na.rm = TRUE)
+  
+  # 进行z检验
+  z_value <- z_transform(r_value)
+  z_mean_other <- z_transform(mean_other_r)
+  
+  # 计算标准误差
+  se <- 1 / sqrt(nrow(filtered_data) - 3)  # 样本大小
+  
+  # 计算z分数
+  z_score <- (z_value - z_mean_other) / se
+  
+  # 计算p值
+  p_value <- 2 * (1 - pnorm(abs(z_score)))
+  
+  # 返回结果
+  result <- data.frame(
+    specific_project_r = r_value,
+    mean_other_r = mean_other_r,
+    z_score = z_score,
+    p_value = round(p_value, 3)  # 保留三位小数
+  )
+  
+  return(result)
+}
+
+# 需要比较的项目列表
+project_pairs <- list(
+  c("DSRSC16", "PHQ2"), c("CDI1", "DSRSC17"), c("CDI4", "DASS3"), 
+  c("CDI11", "DSRSC18"), c("CDI20", "DSRSC15"), c("DSRSC11", "PHQ6"),
+  c("CDI2", "DSRSC1"), c("CDI2", "DASS10"), c("DSRSC1", "DASS10"),
+  c("CDI3", "DASS17"), c("CDI7", "DASS17"), c("CDI24", "DASS17"),
+  c("DSRSC7", "DASS5"), c("DSRSC10", "PHQ1"), c("DSRSC12", "PHQ1"),
+  c("CDI17", "PHQ4"), c("CDI18", "PHQ5"), c("CDI16", "PHQ3"),
+  c("CDI12", "DSRSC4"), c("CDI10", "DSRSC3"), c("CDI9", "PHQ9")
+)
+
+# 比较并存储结果
+comparison_results <- do.call(rbind, lapply(project_pairs, function(pair) {
+  compare_cross_scale_projects(correlation_matrix_reversed, pair[1], pair[2])
+}))
+
+# 设置行名为项目对
+rownames(comparison_results) <- sapply(project_pairs, function(pair) {
+  paste(pair[1], "与", pair[2])
+})
+
+# 打印结果
+print(comparison_results)
+
+
+
+```
+
+
+
+```{r}
+# 9.计算检出率，并且可视化。
+# 计算DSRSC和PHQ-9的
+# 设置阈值
+cutoff_DSRSC <- 15
+cutoff_PHQ <- 10
+
+# 计算DSRSC和PHQ的总分
+total_DSRSC_scores <- rowSums(reversed_data[, grep("^DSRSC", names(reversed_data))])
+total_PHQ_scores <- rowSums(reversed_data[, grep("^PHQ", names(reversed_data))])
+
+# 计算超过cutoff的人数
+detected_DSRSC <- sum(total_DSRSC_scores >= cutoff_DSRSC)
+detected_PHQ <- sum(total_PHQ_scores >= cutoff_PHQ)
+
+# 计算总样本数量
+total_count <- nrow(reversed_data)
+
+# 计算检出率
+detection_rate_DSRSC <- (detected_DSRSC / total_count) * 100
+detection_rate_PHQ <- (detected_PHQ / total_count) * 100
+
+# 打印结果
+cat("DSRSC总分超过cutoff的人数:", detected_DSRSC, "\n")
+cat("DSRSC检出率:", detection_rate_DSRSC, "%\n")
+cat("PHQ总分超过cutoff的人数:", detected_PHQ, "\n")
+cat("PHQ检出率:", detection_rate_PHQ, "%\n")
+
+# 计算CDI的，排除第26题
+cutoff_CDI <- 20  
+total_CDI_scores <- rowSums(reversed_data[, grep("^CDI", names(reversed_data))]) - reversed_data$CDI26
+
+# 计算超过cutoff的人数
+detected_CDI <- sum(total_CDI_scores >= cutoff_CDI)
+
+# 计算检出率
+detection_rate_CDI <- (detected_CDI / total_count) * 100
+
+# 打印结果
+cat("CDI总分超过cutoff的人数:", detected_CDI, "\n")
+cat("CDI检出率:", detection_rate_CDI, "%\n")
+
+# 创建检出率数据框
+detection_rates <- data.frame(
+  Measure = c("DSRSC", "PHQ-9", "CDI"),
+  Detection_Rate = c(detection_rate_DSRSC, detection_rate_PHQ, detection_rate_CDI)
+)
+
+
+# 绘制图形
+ggplot(detection_rates, aes(x = Measure, y = Detection_Rate, fill = Measure)) +
+  geom_bar(stat = "identity", color = "black") +
+  scale_fill_manual(values = c("#1f77b4", "#ff7f0e", "#2ca02c")) + 
+  labs(x = "Measure", y = "Detection Rate (%)") +
+  theme_minimal(base_size = 15) + # 设置基础字体大小
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "white"), # 设置面板背景为白色
+    plot.background = element_rect(fill = "white"), # 设置整个图背景为白色
+    plot.title = element_blank(),
+    legend.position = "none"
+  ) +
+  geom_text(aes(label = round(Detection_Rate, 2)), vjust = -0.5)
+
+# 保存图像到figure文件夹
+ggsave(here::here("figure", "detection_rates_plot.png"), width = 8, height = 5, dpi = 300)
+
+
+```
+
+
+```{r}
+# 加载必要的包
+library(dplyr)
+library(qgraph)
+library(bootnet)
+
+# 移除不需要的变量（性别、年龄、就诊卡号）
+network_data <- reversed_data %>%
+  select(starts_with("DSRSC"), starts_with("PHQ"), starts_with("DASS"), starts_with("CDI"))
+
+# 生成相关矩阵
+cor_matrix <- cor_auto(network_data)
+
+# 绘制网络图并保存为PDF
+pdf("figure/network_graph_optimized.pdf", width = 10, height = 8) 
+
+# 生成网络图并将结果保存到 network_graph 变量
+network_graph <- qgraph(cor_matrix,
+       groups = list(
+           DSRSC = grep("DSRSC", colnames(network_data)),
+           PHQ = grep("PHQ", colnames(network_data)),
+           DASS = grep("DASS", colnames(network_data)),
+           CDI = grep("CDI", colnames(network_data))
+       ), 
+       layout = "spring",
+       vsize = 1.5,          # 节点大小
+       minimum = 0.15,     # 边的最小权重
+       cut = 0.4,          # 边的裁剪值
+       label.scale = TRUE,
+       label.cex = 0.8,    # 标签字体大小
+       label.font = 2,
+       legend = TRUE,
+       legend.cex = 0.8,   # 图例字体大小
+       theme = "colorblind", # 色盲友好主题
+       title = "Optimized Spring Layout Network",
+       label.color = "black",
+       vcolor = "lightblue",  # 节点颜色
+       edge.color = adjustcolor("gray", alpha.f = 0.5),  # 边缘透明度
+       repulsion = 1.5,  # 增加排斥力
+       mar = c(5, 5, 4, 2)  # 调整边距以增加可读性
+)
+
+# 关闭图形设备，保存图像
+dev.off()
+
+# 计算中心指标
+centrality_auto(network_graph) #计算中心指标
+pdf("figure/centrality_plot_optimized.pdf", width = 10, height = 8)
+centralityPlot(network_graph,orderBy="Strength",include=c("Strength","Closeness","Betweenness"),
+               scale = "z-scores")
+dev.off()
+
+
+# 报告结果
+# 计算节点数
+num_nodes <- ncol(cor_matrix)
+
+# 计算边的数量（所有可能的连接）
+num_edges <- num_nodes * (num_nodes - 1) / 2
+
+# 计算非零边的数量（相关矩阵中非零元素的数量）
+nonzero_edges <- sum(cor_matrix[upper.tri(cor_matrix)] != 0)
+
+# 计算边的平均权重
+mean_edge_weight <- mean(cor_matrix[upper.tri(cor_matrix)][cor_matrix[upper.tri(cor_matrix)] != 0])
+
+# 输出结果
+cat("节点数:", num_nodes, "\n")
+cat("边数:", num_edges, "\n")
+cat("非零边数:", nonzero_edges, "\n")
+cat("平均权重:", mean_edge_weight, "\n")
+
+
+```
+
+```{r}
+# 网络结构的准确性分析
+Network <- estimateNetwork(network_data, default = "cor")
+
+####(1) 计算边线的Bootstrap置信区间
+Results1 <- bootnet(Network, statistics=c("strength","closeness","betweenness","edge"), nBoots = 1000, nCores = 5)
+
+# 打开PDF设备，保存结果图
+pdf("figure/Fig_edgeweight_bootstrap.pdf", width = 10, height = 8)  # 修改文件路径和宽高
+plot(Results1, labels = FALSE, order = "sample")
+dev.off()  # 关闭图形设备
+
+```
+
+```{r}
+# 网络结构的准确性分析
+
+####(2) 检验节点或边线之间的差异 节点和节点之间有没有差异，边线和边线之间有没有差异
+plot(Results1, "strength", plot = "difference")#分析节点在强度上的差异检验
+plot(Results1, "closeness", plot = "difference")#分析节点在紧密性上的差异检验
+plot(Results1, "betweenness", plot = "difference")#分析节点在中介性上的差异检验
+
+pdf("figure/Fig_edgeweightdiff.pdf", width=50, height=50)
+plot(Results1, "edge", plot = "difference", onlyNonZero = TRUE, order = "sample")#边线的差异检验
+dev.off()
+
+
+```
+
+
+```{r}
+# 网络结构的准确性分析
+####(3) 检验节点在中心指标的稳定性
+Results2 <- bootnet(Network, statistics=c("strength","closeness","betweenness"), nBoots = 1000, nCores = 3, type = "case") 
+
+plot(Results2 ,statistics=c("strength","closeness","betweenness"))#节点在中心指标的稳定性
+corStability(Results2)#Compute CS-coefficients
+#CS值不低于0.25 在0,5以上比较好。
+```
+
+
+```{r}
+
+#library("devtools")
+#devtools::install_github('hfgolino/EGA')
+
+library("EGAnet")
+
+pdf("figure/EGA_network_plot.pdf", width = 10, height = 8)
+
+ega<-EGA(network_data, plot.EGA = TRUE, node.size = 9, label.size = 2)
+
+dev.off()
+
+```
