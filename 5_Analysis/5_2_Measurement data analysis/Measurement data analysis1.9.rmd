@@ -28,10 +28,9 @@ output: html_document
 # 结果显示：CDI的检出率为49.25，DSRSC的检出率为52.12.PHQ-9的检出率为53.46.
 
 
-# 10：我们使用实证数据探索网络结构，因此进行了网络分析。
-# 第一步，我们制作了网络结构图。第二步，我们计算了中心指标。第三步，我们对网络分析的准确性进行了检验。具体又分为（1）计算边线的Bootstrap置信区间（2）检验节点或边线之间的差异（3）检验节点在中心指标的稳定性
-# 结果详见FIGURE文件夹。
-# 注：其中（2）检验节点或边线之间的差异代码应该没什么问题，但是要比较的数量太多了，我的电脑无法正常处理。
+# 10：我们想要探究不同症状之间可以形成多少个cluster，因此进行了Exploratory Graph Analysis
+# 由于不同问卷之间的题目，可能测量的是同一个症状，因此我们对其进行了合并，以取均值的形式，合并了不同问卷之间的题目。
+
 
 
 
@@ -487,134 +486,182 @@ ggsave(here::here("figure", "detection_rates_plot.png"), width = 8, height = 5, 
 
 ```
 
-
 ```{r}
-# 加载必要的包
-library(dplyr)
-library(qgraph)
-library(bootnet)
-
+# 10.Exploratory Graph Analysis 
+# 将问卷名改成症状名，不合并版本
 # 移除不需要的变量（性别、年龄、就诊卡号）
 network_data <- reversed_data %>%
   select(starts_with("DSRSC"), starts_with("PHQ"), starts_with("DASS"), starts_with("CDI"))
 
-# 生成相关矩阵
-cor_matrix <- cor_auto(network_data)
 
-# 绘制网络图并保存为PDF
-pdf("figure/network_graph_optimized.pdf", width = 10, height = 8) 
+# 保留原始的 network_data 并创建新数据集
+new_1_network_data <- network_data
 
-# 生成网络图并将结果保存到 network_graph 变量
-network_graph <- qgraph(cor_matrix,
-       groups = list(
-           DSRSC = grep("DSRSC", colnames(network_data)),
-           PHQ = grep("PHQ", colnames(network_data)),
-           DASS = grep("DASS", colnames(network_data)),
-           CDI = grep("CDI", colnames(network_data))
-       ), 
-       layout = "spring",
-       vsize = 1.5,          # 节点大小
-       minimum = 0.15,     # 边的最小权重
-       cut = 0.4,          # 边的裁剪值
-       label.scale = TRUE,
-       label.cex = 0.8,    # 标签字体大小
-       label.font = 2,
-       legend = TRUE,
-       legend.cex = 0.8,   # 图例字体大小
-       theme = "colorblind", # 色盲友好主题
-       title = "Optimized Spring Layout Network",
-       label.color = "black",
-       vcolor = "lightblue",  # 节点颜色
-       edge.color = adjustcolor("gray", alpha.f = 0.5),  # 边缘透明度
-       repulsion = 1.5,  # 增加排斥力
-       mar = c(5, 5, 4, 2)  # 调整边距以增加可读性
+# 批量修改变量名称
+colnames(new_1_network_data) <- c(
+  "Sad(CDI1)", "Feeling of hopelessness(CDI2)", "Psychological inferiority(CDI3)", 
+  "Anhedonia(CDI4)", "I am bad all the time", "Psychological worry", 
+  "Psychological inferiority(CDI7)", "Self-blame/Guilt", "Suicidal ideation(CDI9)", 
+  "Cry(CDI10)", "Psychic anxiety(CDI11)", "Reduced socialization(CDI12)", 
+  "Indecisiveness", "Negative body perception", "Learning difficulties", 
+  "Somnipathy(CDI16)", "Fatigue(CDI17)", "Appetite Change(CDI18)", 
+  "Somatic worry", "Feeling of loneliness(CDI20)", "I never have fun at school", 
+  "Lack of friends", "Learning difficulties", "Psychological inferiority(CDI24)", 
+  "Felt people disliked me", "I never do what I'm told", "I get into fights all the time", 
+  "Feeling of hopelessness(DS1)", "Poor sleep(DS2)", "Cry(DS3)", 
+  "Reduced socialization(DS4)", "Running away from home", "Gastrointestinal", 
+  "Loss of energy(DS7)", "Appetite increase", "Inferiority/Self-confidence", 
+  "Interest/ Pleasure loss(DS10)", "Feeling of failure(DS11)", 
+  "Interest/ Pleasure loss(DS12)", "I like talking with my family", 
+  "Poor sleep(DS14)", "Feeling of loneliness(DS15)", "Low mood(DS16)", 
+  "Sad(DS17)", "Psychic anxiety(DS18)", "Interest/ Pleasure loss(PHQ1)", 
+  "Low mood(PHQ2)", "Somnipathy(PHQ3)", "Fatigue(PHQ4)", "Appetite Change(PHQ5)", 
+  "Feeling of failure(PHQ6)", "Concentration", "Retardation&Agitation", 
+  "Suicidal ideation(PHQ9)", "Anhedonia(DA3)", "Loss of energy(DA5)", 
+  "Feeling of hopelessness(DA10)", "Blue", "Interest loss", 
+  "Psychological inferiority(DA17)", "Feeling of worthlessness"
 )
 
-# 关闭图形设备，保存图像
-dev.off()
-
-# 计算中心指标
-centrality_auto(network_graph) #计算中心指标
-pdf("figure/centrality_plot_optimized.pdf", width = 10, height = 8)
-centralityPlot(network_graph,orderBy="Strength",include=c("Strength","Closeness","Betweenness"),
-               scale = "z-scores")
-dev.off()
-
-
-# 报告结果
-# 计算节点数
-num_nodes <- ncol(cor_matrix)
-
-# 计算边的数量（所有可能的连接）
-num_edges <- num_nodes * (num_nodes - 1) / 2
-
-# 计算非零边的数量（相关矩阵中非零元素的数量）
-nonzero_edges <- sum(cor_matrix[upper.tri(cor_matrix)] != 0)
-
-# 计算边的平均权重
-mean_edge_weight <- mean(cor_matrix[upper.tri(cor_matrix)][cor_matrix[upper.tri(cor_matrix)] != 0])
-
-# 输出结果
-cat("节点数:", num_nodes, "\n")
-cat("边数:", num_edges, "\n")
-cat("非零边数:", nonzero_edges, "\n")
-cat("平均权重:", mean_edge_weight, "\n")
-
+# 将修改后的新数据保存为 Excel 文件
+library(openxlsx)
+write.xlsx(new_1_network_data, "data/data2.xlsx")
 
 ```
 
 ```{r}
-# 网络结构的准确性分析
-Network <- estimateNetwork(network_data, default = "cor")
+# 不合并版本的作图
+# 加载所需的包
+library(EGAnet)
 
-####(1) 计算边线的Bootstrap置信区间
-Results1 <- bootnet(Network, statistics=c("strength","closeness","betweenness","edge"), nBoots = 1000, nCores = 5)
+# 1.执行Unique Variable Analysis（唯一变量分析）
+unmerge_uva <- UVA(
+  data = new_1_network_data,  # 使用你的数据集
+  key = colnames(new_1_network_data)  # 使用变量名作为key
+)
 
-# 打开PDF设备，保存结果图
-pdf("figure/Fig_edgeweight_bootstrap.pdf", width = 10, height = 8)  # 修改文件路径和宽高
-plot(Results1, labels = FALSE, order = "sample")
-dev.off()  # 关闭图形设备
+# Print results
+unmerge_uva
+
+unmerge_uva$keep_remove  # 查看哪些变量需要保留（keep）或删除（remove）
 
 ```
 
 ```{r}
-# 网络结构的准确性分析
 
-####(2) 检验节点或边线之间的差异 节点和节点之间有没有差异，边线和边线之间有没有差异
-plot(Results1, "strength", plot = "difference")#分析节点在强度上的差异检验
-plot(Results1, "closeness", plot = "difference")#分析节点在紧密性上的差异检验
-plot(Results1, "betweenness", plot = "difference")#分析节点在中介性上的差异检验
+pdf("figure/EGA_network_plot_unmerge.pdf", width = 10, height = 8)
 
-pdf("figure/Fig_edgeweightdiff.pdf", width=50, height=50)
-plot(Results1, "edge", plot = "difference", onlyNonZero = TRUE, order = "sample")#边线的差异检验
-dev.off()
+# 基于Unique Variable Analysis结果进行EGA分析
+unmerge_ega <- EGA(data = unmerge_uva$reduced_data,plot.EGA = TRUE,node.size = 15, label.size = 2)  # 使用排除掉唯一变量后的数据
 
+# 查看EGA分析结果
+summary(unmerge_ega)
 
 ```
 
 
-```{r}
-# 网络结构的准确性分析
-####(3) 检验节点在中心指标的稳定性
-Results2 <- bootnet(Network, statistics=c("strength","closeness","betweenness"), nBoots = 1000, nCores = 3, type = "case") 
 
-plot(Results2 ,statistics=c("strength","closeness","betweenness"))#节点在中心指标的稳定性
-corStability(Results2)#Compute CS-coefficients
-#CS值不低于0.25 在0,5以上比较好。
-```
 
 
 ```{r}
 
-#library("devtools")
-#devtools::install_github('hfgolino/EGA')
+# 10.Exploratory Graph Analysis 
+# 合并的版本
+# 将测量同一症状的题目合并，取均值的形式。
+new_2_network_data <- network_data %>%
+ 
+  mutate(
+    Sad = rowMeans(select(., CDI1, DSRSC17), na.rm = TRUE), 
+    Feeling_of_hopelessness = rowMeans(select(., CDI2, DSRSC1, DASS10), na.rm = TRUE), 
+    Psychological_inferiority = rowMeans(select(., CDI3, CDI7, CDI24, DASS17), na.rm = TRUE), 
+    Anhedonia = rowMeans(select(., CDI4, DASS3), na.rm = TRUE), 
+    Bad_all_the_time = CDI5,
+    Psychological_worry = CDI6,
+    Self_blame = CDI8,
+    Suicidal_ideation = rowMeans(select(., CDI9, PHQ9), na.rm = TRUE), 
+    Cry = CDI10,
+    Psychic_anxiety = rowMeans(select(., CDI11, DSRSC18), na.rm = TRUE), 
+    Reduced_socialization = rowMeans(select(., CDI12, DSRSC4), na.rm = TRUE),
+    Indecisiveness = CDI13,
+    Negative_body_perception = CDI14,
+    Learning_difficulties = rowMeans(select(., CDI15, CDI22, CDI23), na.rm = TRUE),
+    Somnipathy = rowMeans(select(., CDI16, PHQ3), na.rm = TRUE), 
+    Fatigue = rowMeans(select(., CDI17, PHQ4), na.rm = TRUE), 
+    Appetite_change = rowMeans(select(., CDI18, PHQ5), na.rm = TRUE),
+    Somatic_worry = CDI19,
+    Feeling_of_loneliness = rowMeans(select(., CDI20, DSRSC15), na.rm = TRUE), 
+    Never_have_fun_at_school = CDI21,
+    Poor_sleep = rowMeans(select(., DSRSC2, DSRSC14), na.rm = TRUE),
+    Running_away_from_home = DSRSC5,
+    Gastrointestinal = DSRSC6,
+    Loss_of_energy = rowMeans(select(., DSRSC7, DASS5), na.rm = TRUE), 
+    Appetite_increase = DSRSC8,
+    Inferiority_self_confidence = DSRSC9, 
+    Interest_pleasure_loss = rowMeans(select(., DSRSC10, DSRSC12, PHQ1), na.rm = TRUE), 
+    Feeling_of_failure = rowMeans(select(., DSRSC11, PHQ6), na.rm = TRUE), 
+    Like_talking_with_family = DSRSC13,
+    Low_mood = rowMeans(select(., DSRSC16, PHQ2), na.rm = TRUE), 
+    Concentration = PHQ7,
+    Retardation_and_agitation = PHQ8, 
+    Blue = DASS13, 
+    Interest_loss = DASS16, 
+    Feeling_of_worthlessness = DASS21
+  ) %>%
+  
+  # 只保留新变量，去掉原有的变量
+  select(Sad, Feeling_of_hopelessness, Psychological_inferiority, Anhedonia, 
+         Bad_all_the_time, Psychological_worry, Self_blame, 
+         Suicidal_ideation, Cry, Psychic_anxiety, Reduced_socialization, 
+         Indecisiveness, Negative_body_perception, Learning_difficulties, 
+         Somnipathy, Fatigue, Appetite_change, Somatic_worry, 
+         Feeling_of_loneliness, Never_have_fun_at_school, Poor_sleep, 
+         Running_away_from_home, Gastrointestinal, Loss_of_energy, 
+         Appetite_increase, Inferiority_self_confidence, 
+         Interest_pleasure_loss, Feeling_of_failure, 
+         Like_talking_with_family, Low_mood, Concentration, 
+         Retardation_and_agitation, Blue, Interest_loss, 
+         Feeling_of_worthlessness)
 
-library("EGAnet")
+# 保存新的数据框为Excel文件
+library(writexl)
 
-pdf("figure/EGA_network_plot.pdf", width = 10, height = 8)
+write_xlsx(new_2_network_data, "data/data3.xlsx")
+```
 
-ega<-EGA(network_data, plot.EGA = TRUE, node.size = 9, label.size = 2)
 
-dev.off()
+```{r}
+# 合并版本的作图
+# 加载所需的包
+library(EGAnet)
+
+# 1.执行Unique Variable Analysis（唯一变量分析）
+merge_uva <- UVA(
+  data = new_2_network_data,  # 使用你的数据集
+  key = colnames(new_2_network_data)  # 使用变量名作为key
+)
+
+# Print results
+merge_uva
+
+merge_uva$keep_remove  # 查看哪些变量需要保留（keep）或删除（remove）
 
 ```
+
+```{r}
+
+pdf("figure/EGA_network_plot_merge.pdf", width = 10, height = 8)
+
+# 基于Unique Variable Analysis结果进行EGA分析
+merge_ega <- EGA(data = merge_uva$reduced_data,plot.EGA = TRUE,node.size = 15, label.size = 2)  # 使用排除掉唯一变量后的数据
+
+# 查看EGA分析结果
+summary(merge_ega)
+
+```
+
+
+
+
+
+
+
+
