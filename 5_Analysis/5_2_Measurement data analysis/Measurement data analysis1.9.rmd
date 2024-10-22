@@ -46,6 +46,7 @@ library(ggcorrplot)
 #1.载入数据
 raw_data <- bruceR::import(here::here("data", "Rawdata1.xlsx"))
 
+# 把数据进行预处理，列名中所有的中文使用英文代替。
 #筛选与抑郁有关的数据
 selected_data <- raw_data %>%
   select(就诊卡号, 性别, 年龄, 
@@ -106,7 +107,7 @@ if (!dir.exists(output_dir)) {
 # 6.数据质量检查，反向计分前的相关分析
 correlation_matrix <- filtered_data %>%
   select(matches("DSRSC|PHQ|DASS|CDI")) %>%
-  cor()
+  cor() # HCP: 这里使用的是Pearson相关系数，可能不适用等级数据
 
 # 导出
 output_file <- here::here("output", "correlation_matrix.xlsx")
