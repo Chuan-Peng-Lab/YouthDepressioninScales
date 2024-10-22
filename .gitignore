@@ -3,7 +3,16 @@
 4_Data_Extraction\4_2_Symptoms\4_2_1_Depression\4_2_1_7_Literature_Search\OUTPUT/
 *.zip
 5_Analysis/5_2_Measurement data analysis/data/
-.Rproj.user
+.Rproj.user/
+
+*/*/.Rproj.user/
+*/*/*/.Rproj.user/
+*/*/*/*/.Rproj.user
+5_Analysis/5_2_Measurement data analysis/.Rproj.user/shared/notebooks/paths
 
 # ignore MacOS generated temp file:
 ._*
+
+# ignore r-related files
+.Rhistory
+.RData
