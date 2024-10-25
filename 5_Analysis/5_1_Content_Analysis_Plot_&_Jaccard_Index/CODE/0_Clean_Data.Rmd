@@ -1,0 +1,88 @@
+---
+title: "0_Clean_DATA"
+author: "yuki"
+date: "2023-11-27"
+output: html_document
+---
+```{r}
+library("tidyr")
+library("dplyr")
+```
+
+```{r}
+plot <- list()
+```
+
+```{r}
+raw <- readxl::read_excel("../DATA/DM_2_JI.xlsx")
+
+n_col <- ncol(raw)
+n_row <- nrow(raw)
+```
+
+```{r}
+blank <- data.frame(matrix(NA, nrow = n_col, ncol = n_col))
+rownames(blank) <- colnames(raw)
+colnames(blank) <- colnames(raw)
+```
+
+```{r}
+blank_r <- data.frame(matrix(NA, nrow = n_col, ncol = n_col))
+rownames(blank_r) <- colnames(raw)
+colnames(blank_r) <- colnames(raw)
+```
+
+```{r}
+for (i in 1:n_col){
+  for (j in 1:n_col) { s <- raw %>%
+    dplyr::select(.,i,j) %>% #选择第i列和j列
+    dplyr::mutate(sum = rowSums(., na.rm=TRUE)) %>% #新建一列sum，sum=所有列的和
+    dplyr::filter(.,sum == 2) %>% #选择出所有sum=2的行
+    dplyr::summarise(.,n()) #计算一共有多少行
+  count <- as.numeric(s$`n()`) #将行数变为数值赋值
+  blank[i,j] <- count #将数值放入事先做好的26*26矩阵中
+  }
+}
+```
+
+```{r}
+for (i in 1:n_col){
+  for (j in 1:n_col) { s <- raw %>%
+    dplyr::select(.,i,j) %>% #选择第i列和j列
+    dplyr::mutate(sum = rowSums(., na.rm=TRUE)) %>% #新建一列sum，sum=所有列的和
+    dplyr::filter(.,sum == 2) %>% #选择出所有sum=2的行
+    dplyr::summarise(.,n()) #计算一共有多少行
+                      
+  u1 <- raw %>%
+    dplyr::select(.,i) %>% #选择第i列
+    dplyr::mutate(sum = rowSums(., na.rm=TRUE)) %>% #新建一列sum，sum=所有列的和
+    dplyr::filter(.,sum == 1) %>% #选择出所有sum=1的行
+    dplyr::summarise(.,n()) #计算一共有多少行
+
+  u2 <- raw %>%
+    dplyr::select(.,j) %>% #选择第j列
+    dplyr::mutate(sum = rowSums(., na.rm=TRUE)) %>% #新建一列sum，sum=所有列的和
+    dplyr::filter(.,sum == 1) %>% #选择出所有sum=1的行
+    dplyr::summarise(.,n()) #计算一共有多少行
+                        
+    count_s <- as.numeric(s$`n()`) #将行数变为数值赋值
+    count_u1 <- as.numeric(u1$`n()`) #将行数变为数值赋值
+    count_u2 <- as.numeric(u2$`n()`) #将行数变为数值赋值
+    
+  blank_r[i,j] <- count_s/(count_u1 + count_u2 - count_s) #将数值放入事先做好的26*26矩阵中
+  }
+}
+```
+
+```{r setup, include=FALSE}
+write.csv(blank, "../OUTPUT/Jaccard_Index.csv",row.names=TRUE)
+write.csv(blank_r, "../OUTPUT/Jaccard_Index_ratio.csv",row.names=TRUE)
+```
+
+```{r}
+rm(
+  blank, blank_r, raw, s, u1, u2,
+  count, count_s, count_u1, count_u2, i, j, n_col, n_row
+)
+```
+
