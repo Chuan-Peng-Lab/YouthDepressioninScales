@@ -32,10 +32,6 @@ output: html_document
 # 由于不同问卷之间的题目，可能测量的是同一个症状，因此我们对其进行了合并，以取均值的形式，合并了不同问卷之间的题目。
 
 
-
-
-
-
 # 载入必要的包
 library(here)
 library(bruceR)
@@ -43,22 +39,21 @@ library(tidyverse)
 library(openxlsx)
 library(ggcorrplot)
 
-#1.载入数据
+# 1. 载入数据
 raw_data <- bruceR::import(here::here("data", "Rawdata1.xlsx"))
 
-# 把数据进行预处理，列名中所有的中文使用英文代替。
-#筛选与抑郁有关的数据
 selected_data <- raw_data %>%
-  select(就诊卡号, 性别, 年龄, 
+  select(ID, Gender, Age, 
          DSRSC1:DSRSC18, 
          PHQ1:PHQ9, 
          DASS3, DASS5, DASS10, DASS13, DASS16, DASS17, DASS21, 
          CDI1:CDI27)
 
-#2.转换数据类型
+# 2.转换数据类型，性别从“男”转换为1，“女”转换为2，其他变量转换为数值型
 selected_data_numeric <- selected_data %>%
-  mutate(性别 = factor(性别, levels = c("男", "女"), labels = c(1, 2))) %>%
-  mutate(across(matches("性别|年龄|DSRSC|PHQ|DASS|CDI"), as.numeric))
+  mutate(Gender = factor(Gender, levels = c("男", "女"), labels = c(1, 2))) %>%
+  mutate(across(matches("Gender|Age|DSRSC|PHQ|DASS|CDI"), as.numeric))
+
 
 #3.处理缺失值
 clean_data <- selected_data_numeric %>%
@@ -70,27 +65,26 @@ transformed_data <- clean_data %>%
 
 #5.筛选出年龄在7岁以上且不超过18岁的数据
 filtered_data <- transformed_data %>%
-  filter(年龄 >= 7 & 年龄 <= 18)
+  filter(Age >= 7 & Age <= 18)
 
 # 描述统计
 # 计算性别比例
 gender_proportion <- filtered_data %>%
   summarise(
-    male = sum(性别 == 1, na.rm = TRUE),
-    female = sum(性别 == 2, na.rm = TRUE),
+    male = sum(Gender == 1, na.rm = TRUE),
+    female = sum(Gender == 2, na.rm = TRUE),
     total = n(),
     male_proportion = male / total * 100,
     female_proportion = female / total * 100
   )
-
 # 打印性别比例
 print(gender_proportion)
 
 # 计算年龄的范围
 age_range <- filtered_data %>%
   summarise(
-    min_age = min(年龄, na.rm = TRUE),
-    max_age = max(年龄, na.rm = TRUE)
+    min_age = min(Age, na.rm = TRUE),
+    max_age = max(Age, na.rm = TRUE)
   )
 
 # 打印年龄范围
@@ -104,13 +98,13 @@ if (!dir.exists(output_dir)) {
 ```
 
 ```{r}
-# 6.数据质量检查，反向计分前的相关分析
+# 6. 数据质量检查，反向计分前的相关分析
 correlation_matrix <- filtered_data %>%
   select(matches("DSRSC|PHQ|DASS|CDI")) %>%
-  cor() # HCP: 这里使用的是Pearson相关系数，可能不适用等级数据
+  cor(method = "spearman")  # 使用Spearman相关系数
 
 # 导出
-output_file <- here::here("output", "correlation_matrix.xlsx")
+output_file <- here::here("output", "correlation_matrix_spearman.xlsx")
 write.xlsx(correlation_matrix, output_file)
 
 # 可视化
@@ -119,7 +113,7 @@ p <- ggcorrplot(correlation_matrix, lab = TRUE,
                 outline.color = "white", 
                 colors = c("blue", "white", "red"), 
                 ggtheme = ggplot2::theme_minimal(base_family = "sans"), 
-                title = "未反向计分的相关系数") +
+                title = "未反向计分的斯皮尔曼相关系数") +  # 修改标题
   theme_minimal(base_family = "sans") + 
   theme(
     text = element_text(size = 20, color = "black"), 
@@ -138,8 +132,9 @@ p <- ggcorrplot(correlation_matrix, lab = TRUE,
   labs(x = "", y = "")
 
 # 保存图片
-ggsave(here::here("output", "correlation_heatmap.png"), 
+ggsave(here::here("output", "correlation_heatmap_spearman.png"),  # 修改文件名
        plot = p, width = 32, height = 28, dpi = 300)
+
 ```
 
 
@@ -162,10 +157,10 @@ reversed_data <- filtered_data %>%
 # 计算反向计分后的相关性
 correlation_matrix_reversed <- reversed_data %>%
   select(matches("DSRSC|PHQ|DASS|CDI")) %>%
-  cor()
+  cor(method = "spearman")  # 使用Spearman相关系数
 
 # 导出
-output_file_reversed <- here::here("output", "correlation_matrix_reversed.xlsx")
+output_file_reversed <- here::here("output", "correlation_matrix_reversed_spearman.xlsx")
 write.xlsx(correlation_matrix_reversed, output_file_reversed)
 
 # 可视化
@@ -174,7 +169,7 @@ p_reversed <- ggcorrplot(correlation_matrix_reversed, lab = TRUE,
                          outline.color = "white", 
                          colors = c("blue", "white", "red"), 
                          ggtheme = ggplot2::theme_minimal(base_family = "sans"), 
-                         title = "反向计分后的相关系数") +
+                         title = "反向计分后的斯皮尔曼相关系数") +  # 修改标题
   theme_minimal(base_family = "sans") + 
   theme(
     text = element_text(size = 20, color = "black"), 
@@ -193,13 +188,14 @@ p_reversed <- ggcorrplot(correlation_matrix_reversed, lab = TRUE,
   labs(x = "", y = "")
 
 # 保存图片
-ggsave(here::here("output", "correlation_heatmap_reversed.png"), 
+ggsave(here::here("output", "correlation_heatmap_reversed_spearman.png"),  # 修改文件名
        plot = p_reversed, width = 32, height = 28, dpi = 300)
 ```
 
 
 ```{r}
 # 8.检验问卷内部合并的症状的相关系数是否大于其他的。
+# 使用斯皮尔曼相关系数
 # DSRSC合并了2和14、10和12。
 # CDIQ3Q7Q24合并 Q15Q23合并。
 # 做了DSRSC和CDI每个合并的条目和其他条目（即该量表去除此条目以外的条目）的Z检验。
@@ -209,14 +205,14 @@ z_transform <- function(r) {
   return(0.5 * log((1 + r) / (1 - r)))  # Fisher's Z transformation
 }
 
-# 自定义函数，用于比较特定项目与其他DSRSC项目的相关系数
-compare_specific_projects <- function(cor_matrix, project1, project2) {
+# 自定义函数，用于比较特定项目与其他项目的相关系数
+compare_specific_projects <- function(cor_matrix, project1, project2, scale_prefix) {
   # 提取特定项目的相关系数
   r_value <- cor_matrix[project1, project2]
   
-  # 获取DSRSC项目的相关系数，只包括除了特定项目以外的DSRSC项目
-  other_r_values <- cor_matrix[grep("^DSRSC", rownames(cor_matrix)), 
-                                grep("^DSRSC", colnames(cor_matrix))]  # 仅选择DSRSC相关系数
+  # 获取该量表的相关系数，排除特定项目
+  other_r_values <- cor_matrix[grep(paste0("^", scale_prefix), rownames(cor_matrix)), 
+                                grep(paste0("^", scale_prefix), colnames(cor_matrix))]
   
   # 去除特定项目
   other_r_values <- other_r_values[-which(rownames(other_r_values) %in% c(project1, project2)), 
@@ -235,10 +231,8 @@ compare_specific_projects <- function(cor_matrix, project1, project2) {
   # 计算标准误差
   se <- 1 / sqrt(nrow(filtered_data) - 3)  # 样本大小
   
-  # 计算z分数
+  # 计算z分数和p值
   z_score <- (z_value - z_mean_other) / se
-  
-  # 计算p值
   p_value <- 2 * (1 - pnorm(abs(z_score)))
   
   # 返回结果
@@ -252,81 +246,27 @@ compare_specific_projects <- function(cor_matrix, project1, project2) {
   return(result)
 }
 
-# 使用函数比较特定项目DSRSC2和DSRSC14
-comparison_result_2_14 <- compare_specific_projects(correlation_matrix_reversed, "DSRSC2", "DSRSC14")
-print(comparison_result_2_14)
+# 比较 DSRSC 特定项目
+comparison_result_2_14 <- compare_specific_projects(correlation_matrix_reversed, "DSRSC2", "DSRSC14", "DSRSC")
+comparison_result_10_12 <- compare_specific_projects(correlation_matrix_reversed, "DSRSC10", "DSRSC12", "DSRSC")
 
-# 使用函数比较特定项目DSRSC10和DSRSC12
-comparison_result_10_12 <- compare_specific_projects(correlation_matrix_reversed, "DSRSC10", "DSRSC12")
-print(comparison_result_10_12)
-
-# 合并结果
+# 合并 DSRSC 结果
 combined_result <- rbind(comparison_result_2_14, comparison_result_10_12)
 rownames(combined_result) <- c("DSRSC2与DSRSC14", "DSRSC10与DSRSC12")
-
-# 打印合并后的结果
 print(combined_result)
 
+# 比较 CDI 特定项目
+comparison_result_3_24 <- compare_specific_projects(correlation_matrix_reversed, "CDI3", "CDI24", "CDI")
+comparison_result_7_24 <- compare_specific_projects(correlation_matrix_reversed, "CDI7", "CDI24", "CDI")
+comparison_result_3_7 <- compare_specific_projects(correlation_matrix_reversed, "CDI3", "CDI7", "CDI")
+comparison_result_15_23 <- compare_specific_projects(correlation_matrix_reversed, "CDI15", "CDI23", "CDI")
 
-# 自定义函数，用于比较特定项目与其他CDI项目的相关系数
-compare_specific_projects_CDI <- function(cor_matrix, project1, project2) {
-  # 提取特定项目的相关系数
-  r_value <- cor_matrix[project1, project2]
-  
-  # 获取CDI项目的相关系数，只包括除了特定项目以外的CDI项目
-  other_r_values <- cor_matrix[grep("^CDI", rownames(cor_matrix)), 
-                                grep("^CDI", colnames(cor_matrix))]  # 仅选择CDI相关系数
-  
-  # 去除特定项目
-  other_r_values <- other_r_values[-which(rownames(other_r_values) %in% c(project1, project2)), 
-                                    -which(colnames(other_r_values) %in% c(project1, project2))]
-  
-  # 将其他相关系数展开为向量
-  other_r_values_vector <- as.vector(other_r_values)
-  
-  # 计算其他相关系数的均值
-  mean_other_r <- mean(other_r_values_vector, na.rm = TRUE)
-  
-  # 进行z检验
-  z_value <- z_transform(r_value)
-  z_mean_other <- z_transform(mean_other_r)
-  
-  # 计算标准误差
-  se <- 1 / sqrt(nrow(filtered_data) - 3)  # 样本大小
-  
-  # 计算z分数
-  z_score <- (z_value - z_mean_other) / se
-  
-  # 计算p值
-  p_value <- 2 * (1 - pnorm(abs(z_score)))
-  
-  # 返回结果
-  result <- data.frame(
-    specific_project_r = r_value,
-    mean_other_r = mean_other_r,
-    z_score = z_score,
-    p_value = round(p_value, 3)  # 保留三位小数
-  )
-  
-  return(result)
-}
-
-# 使用函数比较特定项目
-comparison_result_3_24 <- compare_specific_projects_CDI(correlation_matrix_reversed, "CDI3", "CDI24")
-comparison_result_7_24 <- compare_specific_projects_CDI(correlation_matrix_reversed, "CDI7", "CDI24")
-comparison_result_3_7 <- compare_specific_projects_CDI(correlation_matrix_reversed, "CDI3", "CDI7")
-comparison_result_15_23 <- compare_specific_projects_CDI(correlation_matrix_reversed, "CDI15", "CDI23")
-
-# 合并结果
+# 合并 CDI 结果
 combined_result_CDI <- rbind(comparison_result_3_24, 
                               comparison_result_7_24, 
                               comparison_result_3_7, 
                               comparison_result_15_23)
-
-# 设置合并结果的行名
 rownames(combined_result_CDI) <- c("CDI3与CDI24", "CDI7与CDI24", "CDI3与CDI7", "CDI15与CDI23")
-
-# 打印合并后的结果
 print(combined_result_CDI)
 
 
@@ -341,7 +281,6 @@ print(combined_result_CDI)
 # 8.CDI3 7 24  DASS17 9.DSRSC7 DASS5 10.DSRSC10 12 PHQ1 11.CDI17 PHQ4 12.CDI18 PHQ5
 # 13. CDI16 PHQ3 14.CDI12 DSRSC4 15.CDI10 DSRSC3 16.CDI9 PHQ9
 # 做了四个量表每个合并的条目的相关系数和其他条目（四个量表去除此条目以外的条目）平均相关系数的Z检验。
-
 
 
 # 自定义函数，用于比较跨量表项目的相关系数
@@ -418,18 +357,25 @@ print(comparison_results)
 
 ```{r}
 # 9.计算检出率，并且可视化。
-# 计算DSRSC和PHQ-9的
+
+library(ggplot2)
+library(here)
+
 # 设置阈值
 cutoff_DSRSC <- 15
 cutoff_PHQ <- 10
+cutoff_CDI <- 20  
 
-# 计算DSRSC和PHQ的总分
+# 计算总分
+# CDI26题不得分
 total_DSRSC_scores <- rowSums(reversed_data[, grep("^DSRSC", names(reversed_data))])
 total_PHQ_scores <- rowSums(reversed_data[, grep("^PHQ", names(reversed_data))])
+total_CDI_scores <- rowSums(reversed_data[, grep("^CDI", names(reversed_data))]) - reversed_data$CDI26
 
 # 计算超过cutoff的人数
 detected_DSRSC <- sum(total_DSRSC_scores >= cutoff_DSRSC)
 detected_PHQ <- sum(total_PHQ_scores >= cutoff_PHQ)
+detected_CDI <- sum(total_CDI_scores >= cutoff_CDI)
 
 # 计算总样本数量
 total_count <- nrow(reversed_data)
@@ -437,24 +383,13 @@ total_count <- nrow(reversed_data)
 # 计算检出率
 detection_rate_DSRSC <- (detected_DSRSC / total_count) * 100
 detection_rate_PHQ <- (detected_PHQ / total_count) * 100
+detection_rate_CDI <- (detected_CDI / total_count) * 100
 
 # 打印结果
 cat("DSRSC总分超过cutoff的人数:", detected_DSRSC, "\n")
 cat("DSRSC检出率:", detection_rate_DSRSC, "%\n")
 cat("PHQ总分超过cutoff的人数:", detected_PHQ, "\n")
 cat("PHQ检出率:", detection_rate_PHQ, "%\n")
-
-# 计算CDI的，排除第26题
-cutoff_CDI <- 20  
-total_CDI_scores <- rowSums(reversed_data[, grep("^CDI", names(reversed_data))]) - reversed_data$CDI26
-
-# 计算超过cutoff的人数
-detected_CDI <- sum(total_CDI_scores >= cutoff_CDI)
-
-# 计算检出率
-detection_rate_CDI <- (detected_CDI / total_count) * 100
-
-# 打印结果
 cat("CDI总分超过cutoff的人数:", detected_CDI, "\n")
 cat("CDI检出率:", detection_rate_CDI, "%\n")
 
@@ -464,18 +399,17 @@ detection_rates <- data.frame(
   Detection_Rate = c(detection_rate_DSRSC, detection_rate_PHQ, detection_rate_CDI)
 )
 
-
 # 绘制图形
 ggplot(detection_rates, aes(x = Measure, y = Detection_Rate, fill = Measure)) +
   geom_bar(stat = "identity", color = "black") +
   scale_fill_manual(values = c("#1f77b4", "#ff7f0e", "#2ca02c")) + 
   labs(x = "Measure", y = "Detection Rate (%)") +
-  theme_minimal(base_size = 15) + # 设置基础字体大小
+  theme_minimal(base_size = 15) +
   theme(
     panel.grid.major = element_blank(),
     panel.grid.minor = element_blank(),
-    panel.background = element_rect(fill = "white"), # 设置面板背景为白色
-    plot.background = element_rect(fill = "white"), # 设置整个图背景为白色
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
     plot.title = element_blank(),
     legend.position = "none"
   ) +
@@ -484,6 +418,29 @@ ggplot(detection_rates, aes(x = Measure, y = Detection_Rate, fill = Measure)) +
 # 保存图像到figure文件夹
 ggsave(here::here("figure", "detection_rates_plot.png"), width = 8, height = 5, dpi = 300)
 
+# 计算特定个体
+
+
+# PHQ-9检出，但DSRSC和CDI未检出的人
+specific_phq_positive <- reversed_data[total_PHQ_scores >= cutoff_PHQ & total_DSRSC_scores < cutoff_DSRSC & total_CDI_scores < cutoff_CDI, ]
+cat("在PHQ-9检出，但DSRSC和CDI未检出的人数:", nrow(specific_phq_positive), "\n")
+if(nrow(specific_phq_positive) > 0) {
+  print(specific_phq_positive)
+}
+
+# CDI检出，但PHQ-9和DSRSC未检出的人
+specific_cdi_positive <- reversed_data[total_CDI_scores >= cutoff_CDI & total_PHQ_scores < cutoff_PHQ & total_DSRSC_scores < cutoff_DSRSC, ]
+cat("在CDI检出，但PHQ-9和DSRSC未检出的人数:", nrow(specific_cdi_positive), "\n")
+if(nrow(specific_cdi_positive) > 0) {
+  print(specific_cdi_positive)
+}
+
+# DSRSC检出，但PHQ-9和CDI未检出的人
+specific_dsrsc_positive <- reversed_data[total_DSRSC_scores >= cutoff_DSRSC & total_PHQ_scores < cutoff_PHQ & total_CDI_scores < cutoff_CDI, ]
+cat("在DSRSC检出，但PHQ-9和CDI未检出的人数:", nrow(specific_dsrsc_positive), "\n")
+if(nrow(specific_dsrsc_positive) > 0) {
+  print(specific_dsrsc_positive)
+}
 
 ```
 
@@ -523,9 +480,6 @@ colnames(new_1_network_data) <- c(
   "Psychological inferiority(DA17)", "Feeling of worthlessness"
 )
 
-# 将修改后的新数据保存为 Excel 文件
-library(openxlsx)
-write.xlsx(new_1_network_data, "data/data2.xlsx")
 
 ```
 
