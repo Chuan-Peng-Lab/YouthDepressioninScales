@@ -503,7 +503,7 @@ unmerge_uva$keep_remove  # 查看哪些变量需要保留（keep）或删除（r
 
 ```{r}
 
-pdf("figure/EGA_network_plot_unmerge.pdf", width = 10, height = 8)
+pdf(here("figure", "EGA_network_plot_unmerge.pdf"), width = 10, height = 8)
 
 # 基于Unique Variable Analysis结果进行EGA分析
 unmerge_ega <- EGA(data = unmerge_uva$reduced_data,plot.EGA = TRUE,node.size = 15, label.size = 2)  # 使用排除掉唯一变量后的数据
@@ -576,10 +576,7 @@ new_2_network_data <- network_data %>%
          Retardation_and_agitation, Blue, Interest_loss, 
          Feeling_of_worthlessness)
 
-# 保存新的数据框为Excel文件
-library(writexl)
 
-write_xlsx(new_2_network_data, "data/data3.xlsx")
 ```
 
 
@@ -603,7 +600,7 @@ merge_uva$keep_remove  # 查看哪些变量需要保留（keep）或删除（rem
 
 ```{r}
 
-pdf("figure/EGA_network_plot_merge.pdf", width = 10, height = 8)
+pdf(here("figure", "EGA_network_plot_merge.pdf"), width = 10, height = 8)
 
 # 基于Unique Variable Analysis结果进行EGA分析
 merge_ega <- EGA(data = merge_uva$reduced_data,plot.EGA = TRUE,node.size = 15, label.size = 2)  # 使用排除掉唯一变量后的数据
