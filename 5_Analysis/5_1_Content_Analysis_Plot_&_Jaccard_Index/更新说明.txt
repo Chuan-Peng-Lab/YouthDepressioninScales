@@ -2,3 +2,4 @@
 修改了7_Text_Repel.png横轴和纵轴指示的大小
 将bsrs-5改为bsrs
 
+2025.1.19 删除了BDI张雨新
