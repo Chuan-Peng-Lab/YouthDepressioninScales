@@ -1,0 +1,10 @@
+1.1The results of Identify and screen scales是对1The results of Identify and screen scales的参考文献重新进行了整理
+
+图20231106-172841和Jaccard_Index_ratio_meanoverlap数据在CES-D和SDS上有问题，对不上数，最后需要重新核对。
+
+
+2024.5.23 1.1The results of Identify and screen scales更新了年份和测量对象
+
+2024.6.23 删除了复合症状和特殊症状的比例。
+
+2025.1.19 文章中排除了Beck Depression Inventory [Zhang Yuxin Revised Edition]  因此文章中是33
