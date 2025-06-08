@@ -20,3 +20,5 @@ output
 # ignore r-related files
 .Rhistory
 .RData
+
+**/更新说明.txt
