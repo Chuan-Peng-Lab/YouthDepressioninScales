@@ -10,3 +10,5 @@
 2025.1.19 文章中排除了Beck Depression Inventory [Zhang Yuxin Revised Edition]  因此文章中是33
 
 2025.2.8 UPI也算中国编制的，也是青少年的，增加了此部分，更改为DEPERRSION_SYMPTOM 5.8
+
+2025.2.18 bdizhangyuxin与bdi合并后，bdi的文章数量应该从17-18。这才能是441篇文章。
