@@ -1,0 +1,200 @@
+---
+title: "Plot"
+author: "yuki"
+date: "2023-11-02"
+output: html_document
+---
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(papaja)
+```
+
+```{r}
+df <- list()
+df[[1]] <- utils::read.csv("../DATA/p2.csv") %>%
+  dplyr::mutate(order = row_number())
+
+df[[2]] <- utils::read.csv("../DATA/p4.csv")
+
+df[[3]] <- utils::read.csv("../DATA/p5.csv") %>%
+  dplyr::select(-ID, -Type,-count) %>%
+  dplyr::mutate(Order = row_number()) %>%
+  tidyr::pivot_longer(
+    cols = 2:29, 
+    names_to = "Scales",
+    values_to = "count"
+  )
+
+df[[4]] <- utils::read.csv("../DATA/p5_1.csv") %>%
+  dplyr::select(-ID,-count) %>%
+  dplyr::mutate(Order = row_number()) %>%
+  tidyr::pivot_longer(
+    cols = 3:30, 
+    names_to = "Scales",
+    values_to = "count"
+  ) %>%
+  dplyr::mutate(
+    color = count,
+    count = case_when(
+      count == 2 ~ 1,
+      TRUE ~ count
+    ),
+    Type = factor(Type, levels = c(0, 1)),
+    color = factor(color, levels = c(0, 1, 2)),
+  ) 
+
+df[[5]] <- df[[4]] %>%
+  dplyr::mutate(
+    Type = as.numeric(Type),
+    color = as.numeric(color)
+  ) %>%
+  dplyr::group_by(Symptoms) %>% 
+  dplyr::summarise(
+    Type = mean(Type),
+    Order = mean(Order),
+    n = sum(count),
+  ) %>%
+  dplyr::ungroup()
+
+df[[6]] <- read.csv("../DATA/Text_Repel.csv") %>%
+  dplyr::mutate(
+    color = factor(color),
+    frequency = log(frequency, base = exp(1))
+  )
+```
+
+```{r}
+plot[[2]] <- ggplot2::ggplot(df[[1]], aes(x = reorder(Scales, order), y = count)) +
+  ggplot2::geom_bar(stat = "identity", fill = "#D75E01") +
+  ggplot2::ylab("Scale frequency in the meta-analytic dataset") +
+  ggplot2::xlab("Scale Name") +
+  papaja::theme_apa() +
+  ggplot2::theme(
+    text = element_text(size = 16),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+ggplot2::ggsave(
+  plot = last_plot(),
+  filename = "../FIGURE/4_Scales_Frequency.pdf",
+  height = 9,
+  width = 16
+)
+```
+
+```{r}
+plot[[3]] <- ggplot2::ggplot(df[[2]], aes(x = ID, y = value, group = group, fill = group)) +
+  ggplot2::geom_bar(stat = "identity") +
+  ggplot2::ylab("") +
+  ggplot2::xlab("") +
+  ggplot2::scale_fill_manual(values = c("#D75E01", "#3f51b5")) +
+  papaja::theme_apa() +
+  ggplot2::theme(
+    text = element_text(size = 16),
+    legend.title = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+
+ggplot2::ggsave(
+  plot = last_plot(),
+  filename = "../FIGURE/5_Scales_Symptoms.pdf",
+  height = 9,
+  width = 16
+)
+```
+
+```{r}
+plot[[4]] <- ggplot2::ggplot(
+  df[[3]],
+  aes(x = reorder(Symptoms, -Order), y = count, group = Scales, fill = Scales)
+  ) +
+  ggplot2::geom_bar(stat = "identity") +
+  ggplot2::coord_flip() +
+  ggplot2::scale_y_continuous(
+    limits = c(0, 25),
+    expand = c(0, 0),
+    position = "right"
+  ) +
+  ggplot2::ylab("The frequency of this symptom across all scales.") +
+  ggplot2::xlab("") +
+  papaja::theme_apa() +
+  ggplot2::theme(
+    legend.position = "none",
+    text = element_text(size = 12),
+    legend.title = element_blank(),
+  )
+
+ggplot2::ggsave(
+  plot = last_plot(),
+  filename = "../FIGURE/6_Symptoms_Frequency_color.pdf",
+  height = 16,
+  width = 16
+)
+```
+
+
+```{r}
+plot[[5]] <- ggplot2::ggplot(df[[5]],aes(x = reorder(Symptoms, -Order),y = n,)) +
+  ggplot2::geom_bar(stat = "identity",color = "grey80",fill = "grey80") +
+  ggplot2::coord_flip() +
+  ggplot2::scale_y_continuous(
+    limits = c(0, 25),
+    expand = c(0, 0),
+    position = "right"
+  ) +
+  ggplot2::ylab("The frequency of this symptom across all scales.") +
+  ggplot2::xlab("") +
+  #ggplot2::scale_color_manual(values = c("transparent", "#FF8080")) +
+  #ggplot2::scale_fill_manual(values = c("transparent",  "grey80", "grey80")) +
+  papaja::theme_apa() +
+  ggplot2::theme(
+    #axis.text.y = element_text(face = ifelse(df[[5]]$Type == 2, "bold", "plain")),
+    text = element_text(family="serif", size = 20),
+    plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"),
+    legend.position = "none",
+  )
+
+ggplot2::ggsave(
+  plot = last_plot(),
+  filename = "../FIGURE/6_Symptoms_Frequency.png",
+  height = 32,
+  width = 14
+)
+```
+
+```{r}
+p <- plot[[1]] + plot[[5]] +
+  plot_layout(ncol = 2)
+
+ggplot2::ggsave(
+  plot = last_plot(),
+  filename = "../FIGURE/1_6.png",
+  height = 25,
+  width = 40
+)
+```
+
+
+```{r}
+plot[[6]] <- ggplot2::ggplot(df[[6]], aes(x = frequency, y = symptoms, color = color)) +
+  ggplot2::geom_point() +
+  ggplot2::scale_color_manual(values = c("red", "black")) +
+  ggrepel::geom_text_repel(aes(label = label), box.padding = 1) +
+  ggplot2::labs(x = "ln(frequency)") +
+  papaja::theme_apa() +
+  ggplot2::theme(
+    legend.position = "none",
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20)
+  )
+
+ggplot2::ggsave(
+  filename = "../FIGURE/7_Text_Repel.png",
+  width = 12,
+  height = 9
+)
+```
+
