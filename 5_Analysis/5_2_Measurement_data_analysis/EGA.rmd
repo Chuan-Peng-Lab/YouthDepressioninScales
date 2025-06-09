@@ -1,0 +1,476 @@
+---
+title: "实证数据分析"
+author: "why"
+date: "2024.9.5"
+output: html_document
+---
+```{r}
+# 数据处理完整思路
+# 1：载入需要的数据。原始数据中除抑郁问卷外，还包括焦虑问卷，因此只载入测量抑郁的问卷，及人口学信息。具体为DSRSC、CDI、PHQ-9、和DASS-21中测量抑郁的题目。
+# 2：转换数据为数值型。
+# 3：处理缺失值（实际没有缺失值）。
+# 4：原始数据-1，用以方便计算检出率。原始数据的范围与量表正常的数据范围是不一致的。例如：DSRSC量表的计分范围正常应该为0-2，检出率为≥15。但咱们收到的原始数据计分范围就是1-3，也就是所有数值都+了1。因此-1后才能计算正确的检出率。
+# 5：描述统计，原始数据的年龄范围显示为0-29岁，因此参考李医生的建议，筛除了7岁以下和18岁以上的人。
+# 计算了1、性别比例。2、年龄范围。
+# 6：数据质量检查。首先，使用原始数据进行了相关分析，用以检查数据。
+# 发现问题：1、DSRSC问卷内相关有正有负。2、CDI问卷内相关有正有负。因此，数据应该进行反向计分，与李医生讨论过确实需要进行反向计分。
+# 7：反向计分，以及反向计分后的相关分析。
+
+# 上为数据预处理，下面开始正式检验。
+
+# 8: 我们对问卷内部的题目进行了合并，并且在跨问卷中认为一些题目是测量同一症状的。
+# 因此，这些特定题目之间的相关，应该高于其他题目的相关。
+# 对此，我们对特定题目的相关系数和其他题目的相关系数进行了Z检验。
+# 大部分特定题目的相关系数是高于其他的，详细结果见8及8.1。
+
+
+# 9：我们认为儿童青少年不同问卷之间的检出率应该有差异。因此进行了检出率计算。
+# 结果显示：CDI的检出率为49.25，DSRSC的检出率为52.12.PHQ-9的检出率为53.46.
+
+
+# 10：我们想要探究不同症状之间可以形成多少个cluster，因此进行了Exploratory Graph Analysis
+# 由于不同问卷之间的题目，可能测量的是同一个症状，因此我们对其进行了合并，以取均值的形式，合并了不同问卷之间的题目。
+
+
+# 载入必要的包
+library(here)
+library(bruceR)
+library(tidyverse)
+library(openxlsx)
+library(ggcorrplot)
+library(papaja)
+```
+
+```{r}
+# 1. 载入数据
+raw_data <- bruceR::import(here::here("data", "Rawdata1.xlsx"))
+
+selected_data <- raw_data %>%
+  select(ID, Gender, Age, 
+         DSRSC1:DSRSC18, 
+         PHQ1:PHQ9, 
+         DASS3, DASS5, DASS10, DASS13, DASS16, DASS17, DASS21, 
+         CDI1:CDI27)
+
+# 2.转换数据类型，性别从“男”转换为1，“女”转换为2，其他变量转换为数值型
+selected_data_numeric <- selected_data %>%
+  mutate(Gender = factor(Gender, levels = c("男", "女"), labels = c(1, 2))) %>%
+  mutate(across(matches("Gender|Age|DSRSC|PHQ|DASS|CDI"), as.numeric))
+
+
+#3.处理缺失值
+clean_data <- selected_data_numeric %>%
+  drop_na()
+
+#4.原始数据-1，用以方便计算检出率
+transformed_data <- clean_data %>%
+  mutate(across(matches("DSRSC|PHQ|DASS|CDI"), ~ .x - 1))
+
+#5.筛选出年龄在7岁以上且不超过18岁的数据
+filtered_data <- transformed_data %>%
+  filter(Age >= 7 & Age <= 18)
+
+# 描述统计
+# 计算性别比例
+gender_proportion <- filtered_data %>%
+  summarise(
+    male = sum(Gender == 1, na.rm = TRUE),
+    female = sum(Gender == 2, na.rm = TRUE),
+    total = n(),
+    male_proportion = male / total * 100,
+    female_proportion = female / total * 100
+  )
+# 打印性别比例
+print(gender_proportion)
+
+# 计算年龄的范围
+age_range <- filtered_data %>%
+  summarise(
+    min_age = min(Age, na.rm = TRUE),
+    max_age = max(Age, na.rm = TRUE)
+  )
+
+# 打印年龄范围
+print(age_range)
+
+```
+
+```{r}
+# 7.进行反向计分
+# CDI 反向计分项目
+CDI_reverse_items <- c("CDI2", "CDI5", "CDI7", "CDI8", "CDI10", 
+                       "CDI11", "CDI13", "CDI15", "CDI16", 
+                       "CDI18", "CDI21", "CDI24", "CDI25")
+
+# DSRSC 反向计分项目
+DSRSC_reverse_items <- c("DSRSC3", "DSRSC5", "DSRSC6", "DSRSC10", 
+                         "DSRSC14", "DSRSC15", "DSRSC17", "DSRSC18")
+
+# 对CDI和DSRSC项目进行反向计分
+reversed_data <- filtered_data %>%
+  mutate(across(all_of(CDI_reverse_items), ~ 2 - .)) %>%  # 对于0-2范围，反向计分为2减去原分数
+  mutate(across(all_of(DSRSC_reverse_items), ~ 2 - .))
+  
+
+# 计算反向计分后的相关性
+correlation_matrix_reversed <- reversed_data %>%
+  select(matches("DSRSC|PHQ|DASS|CDI")) %>%
+  cor(method = "spearman")  # 使用Spearman相关系数
+
+# 导出
+output_file_reversed <- here::here("output", "correlation_matrix_reversed_spearman.xlsx")
+write.xlsx(correlation_matrix_reversed, output_file_reversed)
+```
+
+
+
+```{r}
+
+# 10.Exploratory Graph Analysis 
+# 将问卷名改成症状名，不合并版本
+# 移除不需要的变量（性别、年龄、就诊卡号）
+library(tidyverse)
+network_data <- reversed_data %>%
+  select(starts_with("DSRSC"), starts_with("PHQ"), starts_with("DASS"), starts_with("CDI"))
+
+
+# 保留原始的 network_data 并创建新数据集
+new_1_network_data <- network_data
+
+# 批量修改变量名称
+colnames(new_1_network_data) <- c(
+  "Sad(CDI1)", "Feeling of hopelessness(CDI2)", "Psychological inferiority(CDI3)", 
+  "Anhedonia(CDI4)", "I am bad all the time", "Psychological worry", 
+  "Psychological inferiority(CDI7)", "Self-blame/Guilt", "Suicidal ideation(CDI9)", 
+  "Cry(CDI10)", "Psychic anxiety(CDI11)", "Reduced socialization(CDI12)", 
+  "Indecisiveness", "Negative body perception", "Learning difficulties(CDI15)", 
+  "Somnipathy(CDI16)", "Fatigue(CDI17)", "Appetite Change(CDI18)", 
+  "Somatic worry", "Feeling of loneliness(CDI20)", "I never have fun at school", 
+  "Lack of friends", "Learning difficulties(CDI23)", "Psychological inferiority(CDI24)", 
+  "Felt people disliked me", "I never do what I'm told", "I get into fights all the time", 
+  "Feeling of hopelessness(DS1)", "Poor sleep(DS2)", "Cry(DS3)", 
+  "Reduced socialization(DS4)", "Running away from home", "Gastrointestinal", 
+  "Loss of energy(DS7)", "Appetite increase", "Inferiority/Self-confidence", 
+  "Interest/ Pleasure loss(DS10)", "Feeling of failure(DS11)", 
+  "Interest/ Pleasure loss(DS12)", "I like talking with my family", 
+  "Poor sleep(DS14)", "Feeling of loneliness(DS15)", "Low mood(DS16)", 
+  "Sad(DS17)", "Psychic anxiety(DS18)", "Interest/ Pleasure loss(PHQ1)", 
+  "Low mood(PHQ2)", "Somnipathy(PHQ3)", "Fatigue(PHQ4)", "Appetite Change(PHQ5)", 
+  "Feeling of failure(PHQ6)", "Concentration", "Retardation&Agitation", 
+  "Suicidal ideation(PHQ9)", "Anhedonia(DA3)", "Loss of energy(DA5)", 
+  "Feeling of hopelessness(DA10)", "Blue", "Interest loss", 
+  "Psychological inferiority(DA17)", "Feeling of worthlessness"
+)
+
+
+```
+
+```{r}
+# 不合并版本的作图
+# 加载所需的包
+library(EGAnet)
+
+# 1.执行Unique Variable Analysis（唯一变量分析）
+unmerge_uva <- UVA(
+  data = new_1_network_data,  # 使用你的数据集
+  key = colnames(new_1_network_data)  # 使用变量名作为key
+)
+
+# Print results
+unmerge_uva
+
+unmerge_uva$keep_remove  # 查看哪些变量需要保留（keep）或删除（remove）
+
+```
+
+```{r}
+
+png("figure/EGA_network_plot_unmerge.png", width = 3300, height = 2000, res = 300)  # 设置分辨率为300 DPI
+# 基于Unique Variable Analysis结果进行EGA分析
+unmerge_ega <- EGA(data = unmerge_uva$reduced_data,plot.EGA = TRUE,node.size = 15, label.size = 2, legend.names = c("Dimension 1", "Dimension 2", "Dimension 3", "Dimension 4", "Dimension 5") 
+)
+
+# 查看EGA分析结果
+summary(unmerge_ega)
+
+```
+
+```{r}
+# Perform Bootstrap EGA
+unmerge_boot <- bootEGA(
+  data = unmerge_uva$reduced_data,
+  seed = 1 # set seed for reproducibility
+)
+dimensionStability(unmerge_boot)
+
+```
+
+
+
+
+```{r}
+
+# 10.Exploratory Graph Analysis 
+# 合并的版本
+# 将测量同一症状的题目合并，取均值的形式。
+
+library(dplyr)
+
+# 合并数据并重命名
+new_2_network_data <- network_data %>%
+  mutate(
+    Sad = rowMeans(select(., CDI1, DSRSC17), na.rm = TRUE), 
+    Feeling_of_hopelessness = rowMeans(select(., CDI2, DSRSC1, DASS10), na.rm = TRUE), 
+    Psychological_inferiority = rowMeans(select(., CDI3, CDI7, CDI24, DASS17), na.rm = TRUE), 
+    Anhedonia = rowMeans(select(., CDI4, DASS3), na.rm = TRUE), 
+    Bad_all_the_time = CDI5,
+    Psychological_worry = CDI6,
+    Self_blame = CDI8,
+    Suicidal_ideation = rowMeans(select(., CDI9, PHQ9), na.rm = TRUE), 
+    Cry = rowMeans(select(., CDI10, DSRSC3), na.rm = TRUE), 
+    Psychic_anxiety = rowMeans(select(., CDI11, DSRSC18), na.rm = TRUE), 
+    Reduced_socialization = rowMeans(select(., CDI12, DSRSC4), na.rm = TRUE),
+    Indecisiveness = CDI13,
+    Negative_body_perception = CDI14,
+    Learning_difficulties = rowMeans(select(., CDI15, CDI23), na.rm = TRUE),
+    Somnipathy = rowMeans(select(., CDI16, PHQ3), na.rm = TRUE), 
+    Fatigue = rowMeans(select(., CDI17, PHQ4), na.rm = TRUE), 
+    Appetite_change = rowMeans(select(., CDI18, PHQ5), na.rm = TRUE),
+    Somatic_worry = CDI19,
+    Feeling_of_loneliness = rowMeans(select(., CDI20, DSRSC15), na.rm = TRUE), 
+    Never_have_fun_at_school = CDI21,
+    Lack_of_friends = CDI22,
+    Felt_people_disliked_me = CDI25,
+    Never_do_what_I_am_told = CDI26,
+    Get_into_fights_all_the_time = CDI27,
+    Poor_sleep = rowMeans(select(., DSRSC2, DSRSC14), na.rm = TRUE),
+    Running_away_from_home = DSRSC5,
+    Gastrointestinal = DSRSC6,
+    Loss_of_energy = rowMeans(select(., DSRSC7, DASS5), na.rm = TRUE), 
+    Appetite_increase = DSRSC8,
+    Inferiority_self_confidence = DSRSC9, 
+    Interest_pleasure_loss = rowMeans(select(., DSRSC10, DSRSC12, PHQ1), na.rm = TRUE), 
+    Feeling_of_failure = rowMeans(select(., DSRSC11, PHQ6), na.rm = TRUE), 
+    Like_talking_with_family = DSRSC13,
+    Low_mood = rowMeans(select(., DSRSC16, PHQ2), na.rm = TRUE), 
+    Concentration = PHQ7,
+    Retardation_and_agitation = PHQ8, 
+    Blue = DASS13, 
+    Interest_loss = DASS16, 
+    Feeling_of_worthlessness = DASS21
+  ) %>%
+  
+  # 只保留新变量，去掉原有的变量
+  select(Sad, Feeling_of_hopelessness, Psychological_inferiority, Anhedonia, 
+         Bad_all_the_time, Psychological_worry, Self_blame, 
+         Suicidal_ideation, Cry, Psychic_anxiety, Reduced_socialization, 
+         Indecisiveness, Negative_body_perception, Learning_difficulties, 
+         Somnipathy, Fatigue, Appetite_change, Somatic_worry, 
+         Feeling_of_loneliness, Never_have_fun_at_school, Lack_of_friends, Felt_people_disliked_me,
+         Never_do_what_I_am_told, Get_into_fights_all_the_time, Poor_sleep, 
+         Running_away_from_home, Gastrointestinal, Loss_of_energy, 
+         Appetite_increase, Inferiority_self_confidence, 
+         Interest_pleasure_loss, Feeling_of_failure, 
+         Like_talking_with_family, Low_mood, Concentration, 
+         Retardation_and_agitation, Blue, Interest_loss, 
+         Feeling_of_worthlessness)
+
+```
+
+
+```{r}
+# 合并版本的作图
+# 加载所需的包
+library(EGAnet)
+
+# 1.执行Unique Variable Analysis（唯一变量分析）
+merge_uva <- UVA(
+  data = new_2_network_data,  # 使用你的数据集
+  key = colnames(new_2_network_data)  # 使用变量名作为key
+)
+
+# Print results
+merge_uva
+
+merge_uva$keep_remove  # 查看哪些变量需要保留（keep）或删除（remove）
+
+```
+
+```{r}
+
+png("figure/EGA_network_plot_merge.png", width = 3300, height = 2000, res = 300)  # 设置分辨率为300 DPI
+# 基于Unique Variable Analysis结果进行EGA分析
+merge_ega <- EGA(data = merge_uva$reduced_data,plot.EGA = TRUE, label.size = 2,legend.names = c("Dimension 1", "Dimension 2", "Dimension 3"),
+                 node.size = 15)  # 使用排除掉唯一变量后的数据
+
+# 查看EGA分析结果
+summary(merge_ega)
+
+```
+
+```{r}
+# Perform Bootstrap EGA
+png("figure/bootEGA_results.png", width = 3300, height = 2000, res = 300)
+
+merge_boot <- bootEGA(
+  data = merge_uva$reduced_data,
+  seed = 1 # set seed for reproducibility
+)
+dimensionStability(merge_boot)
+
+
+```
+
+
+```{r}
+# 第一次移除0.7以下的继续EGA
+
+# 从数据中移除不需要的列
+new_2_network_data_filtered <- new_2_network_data %>%
+  select(-Bad_all_the_time, -Indecisiveness, -Get_into_fights_all_the_time, -Never_do_what_I_am_told, -Lack_of_friends, -Suicidal_ideation )
+
+# 执行Unique Variable Analysis（唯一变量分析）
+merge_uva_filtered <- UVA(
+  data = new_2_network_data_filtered,  # 使用去除列后的数据
+  key = colnames(new_2_network_data_filtered)  # 使用变量名作为key
+)
+
+# 查看结果
+merge_uva_filtered$keep_remove  # 查看哪些变量需要保留（keep）或删除（remove）
+# 设置图像保存路径并绘制EGA网络图
+png("figure/EGA_network_plot_filtered.png", width = 3300, height = 2000, res = 300)
+
+
+# 基于Unique Variable Analysis结果进行EGA分析
+merge_ega_filtered <- EGA(
+  data = merge_uva_filtered$reduced_data,  # 使用排除掉不需要列后的数据
+  plot.EGA = TRUE,
+  label.size = 2,
+  node.size = 15  # 节点大小
+)
+
+# 关闭图像设备
+dev.off()
+
+# 查看EGA分析结果
+summary(merge_ega_filtered)
+
+# 执行Bootstrap EGA分析
+
+png("figure/boot_filtered_EGA_results.png", width = 3300, height = 2000, res = 300)
+merge_boot_filtered <- bootEGA(
+  data = merge_uva_filtered$reduced_data,
+  seed = 1  # 设置种子以保证结果可重复
+)
+
+# 查看Bootstrap分析结果
+dimensionStability(merge_boot_filtered)
+
+
+```
+
+
+```{r}
+# 第二次移除Feeling_of_failure列
+
+new_2_network_data_filtered_second <- new_2_network_data %>%
+  select(-Bad_all_the_time, -Indecisiveness, -Get_into_fights_all_the_time, 
+         -Never_do_what_I_am_told, -Lack_of_friends, -Suicidal_ideation, 
+         -Feeling_of_failure)  # 第二次移除Feeling_of_failure
+
+# 执行Unique Variable Analysis（唯一变量分析）
+merge_uva_filtered_second <- UVA(
+  data = new_2_network_data_filtered_second,  # 使用去除列后的数据
+  key = colnames(new_2_network_data_filtered_second)  # 使用变量名作为key
+)
+
+# 查看结果
+merge_uva_filtered_second$keep_remove  # 查看哪些变量需要保留（keep）或删除（remove）
+
+# 设置图像保存路径并绘制EGA网络图
+png("figure/EGA_network_plot_filtered_second.png", width = 3300, height = 2000, res = 300)
+
+# 基于Unique Variable Analysis结果进行EGA分析
+merge_ega_filtered_second <- EGA(
+  data = merge_uva_filtered_second$reduced_data,  # 使用排除掉不需要列后的数据
+  plot.EGA = TRUE,
+  label.size = 2,
+  legend.names = c("Dimension 1", "Dimension 2", "Dimension 3"),
+  node.size = 15  # 节点大小
+)
+
+# 关闭图像设备
+dev.off()
+
+# 查看EGA分析结果
+summary(merge_ega_filtered_second)
+
+# 执行Bootstrap EGA分析
+
+png("figure/boot_filtered_second_EGA_results.png", width = 3300, height = 2000, res = 300)
+merge_boot_filtered_second <- bootEGA(
+  data = merge_uva_filtered_second$reduced_data,
+  seed = 1  # 设置种子以保证结果可重复
+)
+
+# 查看Bootstrap分析结果
+dimensionStability(merge_boot_filtered_second)
+
+```
+
+```{r}
+# boot与实证数据的比较
+png("figure/merge_compare.png", width = 4000, height = 6000, res = 300)
+
+merge_compare <- compare.EGA.plots(
+  merge_ega_filtered_second, merge_boot_filtered_second,
+  labels = c("Empirical", "Bootstrap")
+)
+
+
+```
+
+
+
+
+
+```{r}
+# 筛选数据进行验证
+# 挑选指定的症状
+selected_symptoms <- new_2_network_data %>%
+  select(Cry, Psychic_anxiety, Fatigue, Appetite_change, Somatic_worry, 
+         Feeling_of_loneliness, Poor_sleep, Gastrointestinal, Low_mood, 
+         Blue, Sad, Anhedonia, Psychological_worry)
+
+# 检查挑选后的数据
+head(selected_symptoms)
+
+# 重新进行EGA分析
+library(EGAnet)
+
+# 执行Unique Variable Analysis（唯一变量分析）
+selected_uva <- UVA(
+  data = selected_symptoms,  # 使用挑选后的数据集
+  key = colnames(selected_symptoms)  # 使用变量名作为key
+)
+
+# 打印UVA分析结果
+selected_uva$keep_remove  # 查看保留（keep）和删除（remove）的变量
+
+# 保存EGA网络图
+png("figure/EGA_network_plot_selected.png", width = 3300, height = 2000, res = 300)  # 设置分辨率为300 DPI
+
+# 基于Unique Variable Analysis结果进行EGA分析
+selected_ega <- EGA(
+  data = selected_symptoms, 
+  plot.EGA = TRUE, 
+  label.size = 2, 
+  node.size = 15
+)
+
+# 查看EGA分析结果
+summary(selected_ega)
+
+
+
+```
