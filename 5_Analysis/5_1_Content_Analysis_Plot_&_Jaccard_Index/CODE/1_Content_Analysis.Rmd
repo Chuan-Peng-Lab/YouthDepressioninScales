@@ -118,7 +118,7 @@ plot[[1]] <- CA_plot %>%
   #circle or not
   #coord_polar() +
   ggplot2::coord_flip() +
-  ggplot2::scale_shape_manual(values=c(21,19)) +
+  ggplot2::scale_shape_manual(values=c(19,21)) +
   ggplot2::scale_y_continuous(
     limits=c(0,n_scales+1),
     expand=c(0,0),
