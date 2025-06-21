@@ -30,7 +30,7 @@ base::row.names(df_ji) <- c(
   #
   "SDS", "SCL-90", "CES-D", 
   "BDI-II", "PHQ-9", "DASS-21", "CBCL_boy", "CBCL_girl", "MFQ-C", 
-  "CES-D-C", "ADI", "BSRS-5", "CES-D-13", "CEPS", "HADS", 
+  "CES-D-C", "ADI", "BSRS", "CES-D-13", "CEPS", "HADS", 
   "Ji_2007", "KADS-11", "Sakuma_2010", "SMFQ", "UPI", "CCSMHS"
 )
 base::colnames(df_ji) <- c(
@@ -40,7 +40,7 @@ base::colnames(df_ji) <- c(
   #
   "SDS", "SCL-90", "CES-D", 
   "BDI-II", "PHQ-9", "DASS-21", "CBCL_boy", "CBCL_girl", "MFQ-C", 
-  "CES-D-C", "ADI", "BSRS-5", "CES-D-13", "CEPS", "HADS", 
+  "CES-D-C", "ADI", "BSRS", "CES-D-13", "CEPS", "HADS", 
   "Ji_2007", "KADS-11", "Sakuma_2010", "SMFQ", "UPI", "CCSMHS"
 )
 ```
@@ -60,7 +60,7 @@ corrplot::corrplot(
   order = "original", # variables order
   col.lim = c(0.00, 1.00), # limits
   is.corr = FALSE, # correlation or not
-  col = c("#FFFFFF", "#FFFAC1", "#FFF584", "#FFE569", "#FFC633", "#FFAA19", "#FF8B0A", "#B70404"), # reverse(color)
+  col = c("#FFFAC1", "#FFE569", "#FFC633", "#FF8B0A", "#B70404")  # <-- 改为5级颜色
 ) %>%
   corrRect(name = c("MSSMHS", "CDI", "SDS", "CCSMHS"))
 dev.off()
