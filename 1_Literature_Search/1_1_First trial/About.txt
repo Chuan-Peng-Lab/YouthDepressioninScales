@@ -1,0 +1,8 @@
+Depression_Raw_Data1.xlsx
+整理出来的，试验阶段每个抑郁量表所包含的题目。
+Contains the items included in each depression scale during the testing phase.
+
+Task1_Assignment.docx
+任务1的分配情况。
+Assignment details for Task 1.
+
