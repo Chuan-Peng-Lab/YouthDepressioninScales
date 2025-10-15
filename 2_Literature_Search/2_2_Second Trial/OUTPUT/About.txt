@@ -1,8 +1,0 @@
-paper是元分析涉及到的已经编码过的全部文章。
-scale是本次内容分析所使用的量表的来源文献/书籍。
-OUTPUT.xlsx是对于meta分析所涉及到的全部文章进行编号、下载，并填充的数据记录表。
-Depression_Scales_summary从量多到量少 包括了所有量表元分析中其的来源，使用该量表的数量，以及咱们内容分析量表的来源。
-Depression_Raw_Data1 包括之前找到的题目的原题，以及本次找到的题目的原题，以及有变化的地方。
-
-paper和scale文件可在https://xlxy.quickconnect.cn/下载
-Depression_Raw_Data2为添加参考文献的题目原题。
