@@ -1,0 +1,7 @@
+OUTPUT.xlsx是对于meta分析所涉及到的全部文章进行编号、下载，并填充以及删除重复文献后的的数据记录表。
+
+Depression_Raw_Data2为添加参考文献的题目原题。
+
+OUTPUT.xlsx — A data record sheet that includes the numbering, downloading, and data entries of all articles involved in the meta-analysis, after filling in and removing duplicate records.
+
+Depression_Raw_Data2.xlsx — Contains the original scale items, supplemented with reference titles.
