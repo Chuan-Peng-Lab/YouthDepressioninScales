@@ -1,0 +1,9 @@
+Assignment — 包含任务说明以及任务所需的参考资料。
+              这些参考资料是从元分析数据集中提取出的全部量表及其使用情况。
+
+Output — 包含本次任务生成的结果。
+
+Assignment — Includes task descriptions and the reference materials required for each task.
+The reference materials are extracted from a meta-analysis dataset, containing all the scales and their corresponding usage information.
+
+Output — Contains the results generated from the current tasks.
