@@ -1,0 +1,445 @@
+---
+title: "STUDY1"
+author: "why"
+date: "2025-10-15"
+output: html_document
+---
+
+```{r}
+# CLEAN DATA
+library("tidyr")
+library("dplyr")
+
+plot <- list()
+
+raw <- readxl::read_excel(here::here("DATA", "DM_2_JI.xlsx"))
+
+
+n_col <- ncol(raw)
+n_row <- nrow(raw)
+
+blank <- data.frame(matrix(NA, nrow = n_col, ncol = n_col))
+rownames(blank) <- colnames(raw)
+colnames(blank) <- colnames(raw)
+
+blank_r <- data.frame(matrix(NA, nrow = n_col, ncol = n_col))
+rownames(blank_r) <- colnames(raw)
+colnames(blank_r) <- colnames(raw)
+
+for (i in 1:n_col){
+  for (j in 1:n_col) { s <- raw %>%
+    dplyr::select(.,i,j) %>% #选择第i列和j列
+    dplyr::mutate(sum = rowSums(., na.rm=TRUE)) %>% #新建一列sum，sum=所有列的和
+    dplyr::filter(.,sum == 2) %>% #选择出所有sum=2的行
+    dplyr::summarise(.,n()) #计算一共有多少行
+  count <- as.numeric(s$`n()`) #将行数变为数值赋值
+  blank[i,j] <- count #将数值放入事先做好的26*26矩阵中
+  }
+}
+
+for (i in 1:n_col){
+  for (j in 1:n_col) { s <- raw %>%
+    dplyr::select(.,i,j) %>% #选择第i列和j列
+    dplyr::mutate(sum = rowSums(., na.rm=TRUE)) %>% #新建一列sum，sum=所有列的和
+    dplyr::filter(.,sum == 2) %>% #选择出所有sum=2的行
+    dplyr::summarise(.,n()) #计算一共有多少行
+                      
+  u1 <- raw %>%
+    dplyr::select(.,i) %>% #选择第i列
+    dplyr::mutate(sum = rowSums(., na.rm=TRUE)) %>% #新建一列sum，sum=所有列的和
+    dplyr::filter(.,sum == 1) %>% #选择出所有sum=1的行
+    dplyr::summarise(.,n()) #计算一共有多少行
+
+  u2 <- raw %>%
+    dplyr::select(.,j) %>% #选择第j列
+    dplyr::mutate(sum = rowSums(., na.rm=TRUE)) %>% #新建一列sum，sum=所有列的和
+    dplyr::filter(.,sum == 1) %>% #选择出所有sum=1的行
+    dplyr::summarise(.,n()) #计算一共有多少行
+                        
+    count_s <- as.numeric(s$`n()`) #将行数变为数值赋值
+    count_u1 <- as.numeric(u1$`n()`) #将行数变为数值赋值
+    count_u2 <- as.numeric(u2$`n()`) #将行数变为数值赋值
+    
+  blank_r[i,j] <- count_s/(count_u1 + count_u2 - count_s) #将数值放入事先做好的26*26矩阵中
+  }
+}
+
+write.csv(blank,  here::here("OUTPUT", "Jaccard_Index.csv"),      row.names = TRUE)
+write.csv(blank_r, here::here("OUTPUT", "Jaccard_Index_ratio.csv"), row.names = TRUE)
+
+rm(
+  blank, blank_r, raw, s, u1, u2,
+  count, count_s, count_u1, count_u2, i, j, n_col, n_row
+)
+```
+
+
+
+
+```{r}
+# 1_Content_Analysis
+#base
+#install.packages('tidyverse')
+#install.packages('bruceR')
+library('dplyr')
+library("tidyr")
+library("readxl")
+#plot
+#install.packages('ggplot2')
+library('ggplot2')
+
+#color
+#install.packages('viridisLite')
+#install.packages('viridis')
+library('viridisLite')
+library('viridis')
+#if you use mac OS, you should change the path of font file
+#default: simsun.ttc (songti)
+
+#Figure1.pdf display Chinese
+#install.packages('showtext')
+#install.packages('Cairo')
+#install.packages('sysfonts')
+#install.packages('showtextdb')
+library('sysfonts')
+library('showtextdb')
+library('showtext')
+library('Cairo')
+
+rawdata <- readxl::read_excel(here::here("DATA", "Depression_Matrix.xlsx"))
+
+#Load data for plot (difference between specific and compound symptoms)
+  #the structure of matrixA: 
+  #first row: scale_name_1, scale_name_2, scale_name_3,...,scale_name_n,S_name
+  #...
+  #each row represents a symptom
+  #each column represents a scale
+
+#setting the number of scales and symptoms 
+n_scales = 28 #number of scales
+n_symptoms = 84 #number of symptoms
+
+################################################################################
+
+order_data = rawdata %>%
+  dplyr::select(-face, -color) %>%
+  dplyr::mutate(count = rowSums(across(where(is.numeric)), na.rm=TRUE)) %>%
+  dplyr::arrange(.,desc(count)) %>%
+  dplyr::select(.,-count)
+
+d <- order_data %>%
+  dplyr::select(.,-S_name) %>%
+  dplyr::mutate(.,S = paste(1:nrow(order_data),sep = "")) %>%
+  reshape2::melt(., id.vars="S", variable.name="Scales", value.name="Type") %>%
+  dplyr::filter(.,Type >= 1) %>%
+  dplyr::mutate(
+    .,
+    Type = ifelse(
+      Type==1,
+      "Scale indirectly captures symptom",
+      "Scale directly captures symptom"
+    )
+  ) %>%
+  dplyr::mutate(.,S=as.numeric(S))
+  
+symp <- order_data %>%
+  ############################让症状倒序排列##################################
+  dplyr::arrange(desc(row_number())) %>%
+  dplyr::mutate(.,S=nrow(.):1) %>%
+  ############################让症状倒序排列##################################
+  dplyr::mutate(S_name = factor(S_name,levels = .$S_name))  %>%
+  dplyr::left_join(rawdata, by = "S_name") %>%
+  dplyr::select(S, S_name, face, color) 
+
+num = d %>%
+  dplyr::mutate(n=1) %>%
+  dplyr::group_by(Scales) %>%
+  dplyr::summarise(.,count = sum(n)) %>%
+  dplyr::ungroup() %>%
+  dplyr::arrange(.,desc(count)) %>%
+  dplyr::mutate(order=1:nrow(.))
+  
+CA_plot = dplyr::full_join(num, d, by = "Scales") %>%
+  dplyr::mutate(Scales2=order) %>%
+  dplyr::mutate(Scales = factor(Scales,levels = num$Scales))  %>%
+  dplyr::mutate(S = factor(S,levels = symp$S,labels = symp$S_name))  %>%
+  dplyr::select(S,Scales,Scales2,Type)
+
+scale <- readxl::read_excel(here::here("DATA", "Depression_Matrix_extra.xlsx")) 
+
+plot[[1]] <- CA_plot %>%
+  ggplot2::ggplot(
+    .,
+    aes(x=S, y=Scales2, group=S, color=Scales, shape=Type, rev=F)
+  ) +
+  ggplot2::geom_line() + #keep this here, otherwise there is an error 
+
+  # Generate the grid lines
+  ggplot2::geom_hline(yintercept = 1:n_scales, color = "grey80", linewidth = .2) +
+  ggplot2::geom_vline(xintercept = 1:n_symptoms, color = "grey80", linewidth = .2) +
+  # Points and lines
+  ggplot2::geom_line(color="grey60") +
+  ggplot2::geom_point(size=3, fill="white") +
+  # Fill the middle space with a white blank rectangle
+  ggplot2::geom_rect(xmin=-Inf,xmax=Inf,ymin=-Inf,ymax=.6,fill="white", color=NA) +
+  # Polar coordinates 
+  #circle or not
+  #coord_polar() +
+  ggplot2::coord_flip() +
+  ggplot2::scale_shape_manual(values=c(19,21)) +
+  ggplot2::scale_y_continuous(
+    limits=c(0,n_scales+1),
+    expand=c(0,0),
+    breaks=1:n_scales,
+    labels=levels(CA_plot$Scales),
+    position = "right"
+  ) +
+  # The angle for the symptoms and remove the default grid lines
+  ggplot2::theme(
+    axis.text.x = element_text(
+      angle=60, hjust=0,vjust = 0,
+      color = case_when(
+        scale$color == 0 ~ "black",
+        scale$color == 1 ~ "#5a9ad7",
+        scale$color == 2 ~ "#ff0000"
+      )
+    ),
+    axis.text.y = element_text(
+      #face = case_when(
+        #symp$face == 0 ~ "plain",
+        #symp$face == 1 ~ "bold",
+      #),
+      color = case_when(
+        symp$color == 0 ~ "black",
+        symp$color == 1 ~ "#5a9ad7",
+        symp$color == 2 ~ "#ff0000"
+      )
+    ),
+    panel.border = element_blank(),
+    axis.line = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    legend.position="left",
+    plot.margin = unit(rep(.5,4), "lines"),
+    text = element_text(family="serif",size=20),
+  ) +
+  ggplot2::guides(color = guide_legend(ncol = 1)) + # legend一列
+  ggplot2::xlab("") +
+  ggplot2::ylab("") +  
+  ggplot2::labs(fill="")  # remove legend title
+    
+    
+ggsave(
+  filename = here::here("FIGURE", "1_Content_Analysis.png"),  
+  width = 18,
+  height = 32
+)
+# Figure 1 was further adjusted in Inkscape
+
+rm(d, num, order_data, CA_plot, rawdata, symp, scale, n_scales, n_symptoms)
+```
+
+```{r}
+#检验OUTPUT中的Jaccard_Index_ratio.csv和DATA中的Jaccard_Index_ratio.csv是否一致
+
+library(dplyr)
+df_data <- read.csv(
+  here::here("DATA", "Jaccard_Index_ratio.csv"),
+  check.names = FALSE,
+  row.names = 1
+)
+df_out <- read.csv(
+  here::here("OUTPUT", "Jaccard_Index_ratio.csv"),
+  check.names = FALSE,
+  row.names = 1
+)
+
+# 2️⃣ 去掉可能的非数值列（例如 Scales）
+df_data <- dplyr::select(df_data, -dplyr::any_of("Scales"))
+df_out  <- dplyr::select(df_out,  -dplyr::any_of("Scales"))
+
+# 3️⃣ 转为矩阵
+m_data <- as.matrix(df_data)
+m_out  <- as.matrix(df_out)
+
+# 4️⃣ 自动按行名、列名排序对齐
+common_rows <- intersect(rownames(m_data), rownames(m_out))
+common_cols <- intersect(colnames(m_data), colnames(m_out))
+m_data <- m_data[common_rows, common_cols]
+m_out  <- m_out [common_rows, common_cols]
+
+# 5️⃣ 数值比较（允许微小浮点误差）
+same <- all(abs(m_data - m_out) < 1e-8, na.rm = TRUE)
+
+if (same) {
+  cat("✅ 两个文件的数值完全一致（顺序不同但内容相同）\n")
+} else {
+  cat("❌ 文件内容存在差异，下面列出不同的单元格：\n")
+  diff_idx <- which(abs(m_data - m_out) > 1e-8, arr.ind = TRUE)
+  diff_tbl <- data.frame(
+    Row   = rownames(m_data)[diff_idx[, 1]],
+    Col   = colnames(m_data)[diff_idx[, 2]],
+    Data  = m_data[diff_idx],
+    Out   = m_out [diff_idx]
+  )
+  print(diff_tbl)
+}
+
+# 自然数字排序函数：提取名字里的数字并按其排序
+.num <- function(x) as.integer(gsub("\\D+", "", x))
+
+ord_rows <- order(.num(rownames(m_data)))
+ord_cols <- order(.num(colnames(m_data)))
+
+m_sorted <- m_data[ord_rows, ord_cols, drop = FALSE]
+write.csv(
+  m_sorted,
+  here::here("OUTPUT", "Jaccard_Index_ratio_sorted.csv"),
+  row.names = TRUE
+)
+
+
+# 算平均重叠度
+# 1️⃣ 读入 Jaccard 相似度矩阵
+ji <- read.csv(
+  here::here("OUTPUT", "Jaccard_Index_ratio.csv"),
+  check.names = FALSE,
+  row.names = 1
+)
+# 2️⃣ 转为矩阵
+ji_mat <- as.matrix(ji)
+
+# 3️⃣ 去掉对角线（因为自己和自己重叠度 = 1）
+diag(ji_mat) <- NA
+
+# 4️⃣ 计算每个量表的平均重叠度（行平均）
+avg_per_scale <- rowMeans(ji_mat, na.rm = TRUE)
+
+# 5️⃣ 计算总体平均重叠度（上三角平均，避免重复计算）
+overall_avg <- mean(ji_mat[upper.tri(ji_mat)], na.rm = TRUE)
+
+# 6️⃣ 打印结果
+cat("每个量表的平均重叠度：\n")
+print(round(avg_per_scale, 4))
+cat("\n总体平均重叠度：", round(overall_avg, 4), "\n")
+
+
+
+```
+
+```{r}
+# HEARTMAP 
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(reshape2)
+library(patchwork)
+
+library(corrplot)
+library(RColorBrewer)
+library(grDevices)
+
+library(tinylabels)
+library(papaja)
+
+df_ji <- read.csv(here::here("DATA", "Jaccard_Index_ratio.csv")) %>%
+  dplyr::select(-Scales) %>%
+  base::as.matrix(.)
+base::row.names(df_ji) <- c(
+  "MSSMHS", "CSSDS",
+  #
+  "CDI", "DSRSC", "BDI-I", "DSI", "HAMD", 
+  #
+  "SDS", "SCL-90", "CES-D", 
+  "BDI-II", "PHQ-9", "DASS-21", "CBCL_boy", "CBCL_girl", "MFQ-C", 
+  "CES-D-C", "ADI", "BSRS", "CES-D-13", "CEPS", "HADS", 
+  "Ji_2007", "KADS-11", "Sakuma_2010", "SMFQ", "UPI", "CCSMHS"
+)
+base::colnames(df_ji) <- c(
+  "MSSMHS", "CSSDS",
+  #
+  "CDI", "DSRSC", "BDI-I", "DSI", "HAMD", 
+  #
+  "SDS", "SCL-90", "CES-D", 
+  "BDI-II", "PHQ-9", "DASS-21", "CBCL_boy", "CBCL_girl", "MFQ-C", 
+  "CES-D-C", "ADI", "BSRS", "CES-D-13", "CEPS", "HADS", 
+  "Ji_2007", "KADS-11", "Sakuma_2010", "SMFQ", "UPI", "CCSMHS"
+)
+
+base::colnames(df_ji) <- rownames(df_ji)
+
+# 颜色分成4级：0–0.2, 0.2–0.4, 0.4–0.6, 0.6–0.8
+# 每段一个颜色
+my_colors <- c("#FFFAC1", "#FFE569", "#FFC633", "#FF8B0A")
+my_breaks <- c(0.0, 0.2, 0.4, 0.6, 0.8)  # 注意是5个断点 => 4段颜色
+
+grDevices::pdf(
+  file = here::here("FIGURE", "2_Heatmap.pdf"),  # ✅ 改为 here()
+  width = 16, height = 12
+)
+
+corrplot::corrplot(
+  df_ji,
+  method = "circle",
+  addCoef.col = 'black',
+  diag = FALSE,
+  addrect = 2,
+  type = "upper",
+  order = "original",
+  col = c("#FFFAC1", "#FFE569", "#FFC633", "#FF8B0A"),
+  is.corr = FALSE,
+  col.lim = c(0, 0.8),
+  cl.lim = c(0, 0.8),
+  cl.breaks = c(0.0, 0.2, 0.4, 0.6, 0.8),  
+  cl.length = 5,                           
+  cl.cex = 1.0                             
+) %>%
+  corrRect(name = c("MSSMHS", "CDI", "SDS", "CCSMHS"))
+
+dev.off()
+```
+
+
+```{r}
+# 量表频率
+###############################################################################
+
+###############################################################################
+
+# ==== 载入依赖包 ====
+library(dplyr)
+library(ggplot2)
+library(papaja)
+library(ggrepel)
+
+# ==== 读取数据 ====
+df <- read.csv(here::here("DATA", "Text_Repel.csv")) %>% 
+  dplyr::mutate(
+    color = factor(color),
+    frequency = log(frequency, base = exp(1))
+  )
+
+# ==== 绘图 ====
+p <- ggplot2::ggplot(df, aes(x = frequency, y = symptoms, color = color)) +
+  ggplot2::geom_point() +
+  ggplot2::scale_color_manual(values = c("red", "black")) +
+  ggrepel::geom_text_repel(aes(label = label), box.padding = 1) +
+  ggplot2::labs(x = "ln(frequency)", y = "Symptoms") +
+  papaja::theme_apa() +
+  ggplot2::theme(
+    legend.position = "none",
+    axis.title.x = element_text(size = 20),
+    axis.title.y = element_text(size = 20)
+  )
+
+# ==== 导出图像 ====
+ggplot2::ggsave(
+  filename = here::here("FIGURE", "7_Text_Repel.png"),
+  plot = p,
+  width = 12,
+  height = 9
+)
+
+
+```
