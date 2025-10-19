@@ -1,9 +1,13 @@
-重新对4_2_1_3_Inner Scales_Items Combining进行double check，检查之前所做有没有不合理的地方
-
+重新对2_2Inner Scales_Items Combining进行double check，检查之前所做有没有不合理的地方
+A double-check (DC) of 2_2 Inner Scales_Items Combining to verify and correct any potentially 
+inconsistent or unreasonable merging decisions made in the earlier step.
 OUTPUT
 	包含了各个成员分开的结果以及最终讨论后的结果
-
+        Contains the individual results from each team member as well as the final version agreed upon after group discussion. 
 Depression_Raw_Data7(ISIC_DC)
 	Inner Scales_Items Combining_Double Check
 	之后，再转化为最终由Liuqing对矩阵进行double check
 	得到Depression_Symptom_MatrixA_DC，之后将以此画图
+        Produced after the Inner Scales_Items Combining Double Check. 
+        The resulting matrix was then double-checked by Liuqing, generating Depression_Symptom_MatrixA_DC, 
+        which served as the basis for subsequent visualization.
