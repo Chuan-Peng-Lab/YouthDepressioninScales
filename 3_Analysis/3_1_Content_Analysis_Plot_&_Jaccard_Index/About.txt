@@ -1,0 +1,37 @@
+Clean Data
+载入的数据为：DM_2_JI.xlsx 
+DM_2_JI.xlsx是由Depression_Symptom5.8的jaccardsheet整理而来，已测试，全部数据一致。
+输出的数据为：Jaccard_Index.csv和Jaccard_Index_ratio.csv
+
+1_Content_Analysis
+载入的数据为：
+Depression_Matrix.xlsx以及Depression_Matrix_extra.xlsx
+一个是读取，一个是上色
+输出的为：1_Content_Analysis.png
+Depression_Matrix_extra.xlsx
+是给图上面的量表名上色，中国的用蓝色，儿童青少年的用红色，其他用黑色，已与Depression_Symptom5.8核对，无误
+Depression_Matrix.xlsx也是由5.8的画图sheet整理而来，数据无误，症状颜色也与Depression_Symptom5.8核对，无误
+
+
+2HEARTMAP 
+载入的数据是Jaccard_Index_ratio.csv，经代码检测，与OUTPUT中的Jaccard_Index_ratio.csv完全一致
+
+文章的图是由HEARTMAP.pdf PS而来，见overlap6.22.psd
+
+3 量表频率图
+载入的数据为：Text_Repel.csv
+数据已与文章数计算&Depression_Symptom5.8核对，无误。
+
+Input: DM_2_JI.xlsx, which was compiled from the Jaccard sheet in Depression_Symptom5.8.
+All data have been verified for consistency.
+Output: Jaccard_Index.csv and Jaccard_Index_ratio.csv.
+Input: Depression_Matrix.xlsx and Depression_Matrix_extra.xlsx.
+The first provides the main data for plotting, while the second specifies the color scheme for scale names.
+Output: 1_Content_Analysis.png
+Note: Depression_Matrix_extra.xlsx assigns colors—blue for Chinese scales, red for child/adolescent scales, black for others.
+Both files have been cross-checked with Depression_Symptom 5.8 for accuracy.
+Input: Jaccard_Index_ratio.csv, verified to be identical to the version in the OUTPUT folder.
+Output: 2_Heatmap.pdf
+The figure presented in the manuscript was adapted from HEARTMAP.pdf and finalized in Photoshop (see overlap6.22.psd for the editable version).
+Input: Text_Repel.csv, cross-validated with both the article-count records and Depression_Symptom 5.8.
+Output: 7_Text_Repel.png
