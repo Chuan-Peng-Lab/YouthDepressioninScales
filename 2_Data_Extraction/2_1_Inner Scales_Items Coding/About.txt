@@ -1,9 +1,12 @@
 OUTPUT\Haoyuan&Liuqing
 	包含了Haoyuan和Liuqing的结果
+        Contains the analysis results from Haoyuan and Liuqing.
 OUTPUT\Mengzhen&Weibiao
 	包含了Mengzhen和Weibiao的结果
-
+        Contains the analysis results from Mengzhen and Weibiao.
 Depression_Raw_Data2(coded).xlsx
-	四个人，亮亮将题目编码为症状后的汇总文件
+	四个人，将题目编码为症状后的汇总文件
+        Consolidated dataset where four researchers coded questionnaire items into symptom-level         data.
 Task2_Assignment.docx
-	任务2的分配情况
+	任务2的分配情况。
+        Document showing the task assignment details for Task 2.
