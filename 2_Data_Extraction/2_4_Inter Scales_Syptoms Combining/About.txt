@@ -1,5 +1,8 @@
-4_2_1_4_0_Zero Trial
+2_4_0_Zero Trial
 	粗略的将可能可以合并的症状进行了合并
-4_2_1_4_1_First Trial
+        A preliminary trial where potentially similar symptoms were roughly merged for the first time.
+2_4_1_First Trial
 	Haoyuan和Mengzhen对可能可以合并的症状进行了合并
 	再由四个人一起讨论，得到最终结果
+        Haoyuan and Mengzhen first merged symptoms that could potentially be combined, 
+        and the final version was determined after group discussion among all four members.

@@ -2,7 +2,14 @@
 	在task5中，已经确定了哪些症状可以合并，我们的症状总数有所减少
 	确定好了所有量表的题目所应该对应的新症状（合并后的症状）
 	6-0由5-1整理得到
+        In Task 5, the symptoms that could be merged were identified, leading to a reduced total number of symptoms. 
+        This stage finalized the mapping of each questionnaire item to its new      
+        (merged) symptom. The file 6-0 was compiled based on 5-1.
 4_2_5_1_First Trial
 	四个人各自对每一个题目所在症状，是特殊症状还是复合症状进行编码
 	确定了哪些是特殊症状，哪些是复合症状后，所以接下来只需要将对应的题目编码为1或2即可
 	如果一个量表中存在某复合症状，则该量表该题目被编码为2，其余下的特殊症状被编码为1
+        Each of the four researchers independently coded the symptoms corresponding to each item,
+        classifying them as either specific symptoms or compound symptoms.
+        After these classifications were finalized, each item was coded as 1 or 2: items belonging to compound symptoms were coded as 2,
+        and those belonging to specific symptoms were coded as 1.

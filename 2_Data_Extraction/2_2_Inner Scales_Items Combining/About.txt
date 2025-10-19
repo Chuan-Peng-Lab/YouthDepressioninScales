@@ -1,13 +1,19 @@
 OUTPUT\Haoyuan&Liuqing
 	包含了Haoyuan和Liuqing的结果
+        Contains the analysis results produced by Haoyuan and Liuqing.
 OUTPUT\Mengzhen&Weibiao
 	包含了Mengzhen和Weibiao的结果
+        Contains the analysis results produced by Mengzhen and Weibiao.
 OUTPUT\Discussed
 	两两讨论后确定的结果
+        Contains the results finalized after pairwise discussions among team members.
 OUTPUT\Final
 	四人合并后，并由Liuqing核对的结果
-
+        The final integrated results after merging contributions from all four researchers and verified by Liuqing.
 Depression_Raw_Data3(coded & combined).xlsx
-	将题目编码为症状，并将一个量表内的类似题目合并为同一个症状
+	将题目编码为症状，并将一个量表内的类似题目合并为同一个症状。
+        Scale items are coded into symptoms, and similar items within 
+        each scale are merged into a single symptom entry.
 Task3_Assignment.docx
 	任务3的分配情况
+        Document showing the task assignments for Task 3.

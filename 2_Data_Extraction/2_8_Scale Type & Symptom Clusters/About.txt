@@ -1,0 +1,10 @@
+Assignment
+记录任务的分配情况。
+Contains task assignment details for this stage of analysis.
+OUTPUT
+记录单人的结果和讨论后的结果。
+任务是筛查类的还是诊断类的见4 members_output
+症状群部分最终没用到。
+Includes both individual results and the final consensus version after team discussion.
+The classification of screening-type vs. diagnostic-type questionnaires can be found in 4_members_output.
+The symptom cluster section was not used in the final analysis.

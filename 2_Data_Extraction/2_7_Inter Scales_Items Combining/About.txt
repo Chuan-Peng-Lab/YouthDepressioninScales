@@ -1,4 +1,9 @@
-使用2_Literature_Search\2_1_Depression\2_1_1_Scale的结果进行内容分析，即将能够归类到同一个内容的题项放在同一行。
+使用Literature_Search的结果进行内容分析，即将能够归类到同一个内容的题项放在同一行。
+Conducted content analysis based on the results of Literature_Search, grouping items that share 
+the same conceptual meaning into the same row.
 Assignment里为任务的分配。
+Contains task assignment details for this stage of analysis.
 output里为各个成员整理的结果以及最终讨论后的结果。
+Includes individual results from each member and the final version agreed upon after team discussion.
 最终作图做表使用结果为Depression_Symptom3，具体见更新说明。
+The final dataset used for visualization and table generation; see the update notes for detailed information.
