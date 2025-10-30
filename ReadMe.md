@@ -19,10 +19,6 @@ This project is about heterogeneity of scales that used for measuring mental hea
 
 ```
 |-root_dir
-|---1_General_Protocol
-|-------About_Protocol.txt
-|-------Research_Design.docx
-|-------Literature_Review.docx
 
 |---2_Literature_Search
 |-------README.txt
