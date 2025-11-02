@@ -19,13 +19,18 @@ This project is about heterogeneity of scales that used for measuring mental hea
 
 ```
 |-root_dir
-|---1_General_Protocol
-|-------About_Protocol.txt
-|-------Research_Design.docx
-|-------Literature_Review.docx
 
-|---2_Literature_Search
+|---1_Literature_Search
 |-------README.txt
+|------------1_1 First trial
+|------------------About.txt
+|------------------Depression_Raw_Data1.xlsx
+|------------------Task1_Assignment.docx
+|------------1_2 Second Trial
+|------------------Assignment
+|------------------OUTPUT
+
+
 |------------2_1 First trial
 |------------------About.txt
 |------------------Depression_Raw_Data1.xlsx
@@ -39,6 +44,7 @@ This project is about heterogeneity of scales that used for measuring mental hea
 |---3_Article_Screen
 
 
+>>>>>>> d8cce7ab7368accb0ae93d6d46cdb543de4cf482
 |---4_Data_Extraction
 |-------About.txt
 |-------4_1_Raw_Data
