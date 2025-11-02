@@ -97,7 +97,6 @@ This project is about heterogeneity of scales that used for measuring mental hea
 |---------------------------OUTPUT
 |---------------------------About.txt
 |---------------------------Depression_Symptom5.7.xlsx
-|---------------------------更新说明.txt
 |------------------ 2_8_Scale Type & Symptom Clusters
 |---------------------------Assignment.docx
 |---------------------------OUTPUT
