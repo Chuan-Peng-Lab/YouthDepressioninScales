@@ -22,7 +22,7 @@ PsyArxiv: https://osf.io/preprints/psyarxiv/scb6v_v1/
 ├── 1_Literature_Search
 │   ├── 1_1_First trial
 │   ├── 1_2_Second Trial
-│   └── README.txt
+│   └── README.md
 ├── 2_Data_Extraction
 │   ├── 2_1_Inner Scales_Items Coding
 │   ├── 2_2_Inner Scales_Items Combining
@@ -33,29 +33,19 @@ PsyArxiv: https://osf.io/preprints/psyarxiv/scb6v_v1/
 │   ├── 2_7_Inter Scales_Items Combining
 │   ├── 2_8_Scale Type & Symptom Clusters
 │   ├── 2_9_Measurement data
-│   └── ReadMe.txt
+│   └── ReadMe.md
 ├── 3_Analysis
 │   ├── 3_1_Content_Analysis_Plot_&_Jaccard_Index
 │   ├── 3_2_Measurement_data_analysis
-│   ├── 3_3_Supplementary_materials
-│   ├── 3_4_Other_plot_and_data
-│   ├── 3_5_Correlation_analysis
 │   └── README.md
-├── 4_XXX             # this folder was not open because of privacy issues
-├── 5_XXX             # this folder was not open because of privacy issues
-├── 6_Reports
+├── 4_Reports
 │   ├── About.txt
 │   ├── MH_23_1.13.pptx
 │   ├── MH_23_7.6.pptx
 │   ├── MH_24_1.21.pptx
 │   ├── MH_24_6.25.pptx
 │   ├── MH_25_1.14.pptx
-│   └── README.txt
-├── output
-│   ├── correlation_heatmap_reversed_spearman.png
-│   ├── correlation_heatmap_spearman.png
-│   ├── correlation_matrix_reversed_spearman.xlsx
-│   └── correlation_matrix_spearman.xlsx
+│   └── README.md
 ├── ReadMe.md
 └── YouthDepressioninScales.Rproj
 ```
