@@ -1,2 +1,0 @@
-本项目旨在收集并整理与抑郁量表相关的文献，并提取相关量表以供后续分析使用。
-This project focuses on collecting and organizing literature related to depression scales, as well as extracting and compiling relevant scales for further analysis.
