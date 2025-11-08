@@ -1,10 +1,24 @@
-5_1_Content Analysis Plot & Jaccard Index
-	对抑郁的量表进行内容分析，然后进行的画图，以及对抑郁量表的结果计算了Jaccard Index。
-5_2 Measurement data analysis
-        李医生给的实证数据的分析。
-5_3_Supplementary materials
-        文章中的补充材料
-5_4_Other plot and data
-        其他图片和制图数据
-5_5_Correlation analysis 
-        量表长度、Meanoverlap、捕捉到的症状的斯皮尔曼相关。
+3\_1\_Content Analysis
+包括对抑郁的量表进行内容分析的画图，以及对抑郁量表的结果计算了Jaccard Index。
+补充材料包括文章数的计算，症状表（作图的原表），流程图，重叠度图的PS文件，量表识别的结果。
+3\_2 Measurement data analysis
+李医生给的实证数据的分析。
+
+
+
+3\_1 Content Analysis
+
+
+
+Includes content analysis of depression scales, along with graphical representations, and the calculation of the Jaccard Index for the depression scales' results.
+
+Supplementary materials include article count calculations, symptom tables (original table used for plotting), flowchart, PS files for overlap charts, and results of scale identification.
+
+
+
+3\_2 Measurement Data Analysis
+
+
+
+Analysis of empirical data provided by Dr. Li.
+

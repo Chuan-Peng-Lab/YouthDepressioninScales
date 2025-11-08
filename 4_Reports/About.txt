@@ -1,6 +1,0 @@
-Method&Result
-里面是数次的结果和讨论
-Question
-里面是准备问医生的问题
-Content Analysis_Depression_Reply
-是医生问的问题，及对其的回复
