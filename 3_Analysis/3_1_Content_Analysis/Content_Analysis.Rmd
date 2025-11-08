@@ -324,6 +324,17 @@ cat("每个量表的平均重叠度：\n")
 print(round(avg_per_scale, 4))
 cat("\n总体平均重叠度：", round(overall_avg, 4), "\n")
 
+# ==== 新增：中位数 + IQR ====
+ji_values <- ji_mat[upper.tri(ji_mat)]
+ji_values <- ji_values[!is.na(ji_values)]
+
+median_val <- median(ji_values)
+iqr_vals <- quantile(ji_values, probs = c(0.25, 0.75))
+iqr_val <- IQR(ji_values)
+
+cat("\n—— 分布的稳健指标 ——\n")
+cat("中位数 (Median):", round(median_val, 4), "\n")
+cat("IQR (25%–75%):", paste(round(iqr_vals, 4), collapse = " – "), "\n")
 
 
 ```
@@ -402,6 +413,173 @@ dev.off()
 
 
 ```{r}
+# 画分布图
+# ============================================================
+# 0. Load Required Libraries
+# ============================================================
+library(dplyr)
+library(ggplot2)
+library(papaja)
+library(here)
+
+# ============================================================
+# 1. Load Data
+# ============================================================
+df_ji <- read.csv(here::here("DATA", "Jaccard_Index_ratio.csv"), 
+                  check.names = FALSE, row.names = 1)
+
+# 去掉非数值列
+df_ji <- df_ji %>% dplyr::select(where(is.numeric)) %>% as.matrix()
+
+# 去掉对角线（自身重叠度=1）
+diag(df_ji) <- NA
+
+# 取上三角部分（避免重复）
+ji_values <- df_ji[upper.tri(df_ji, diag = FALSE)]
+
+# 去掉 NA
+ji_values <- ji_values[!is.na(ji_values)]
+
+# 转换为数据框
+df_hist <- data.frame(Jaccard = ji_values)
+
+# ============================================================
+# 2. Plot Distribution (APA Style)
+# ============================================================
+p <- ggplot(df_hist, aes(x = Jaccard)) +
+  geom_histogram(
+    bins = 25,
+    aes(y = after_stat(density)),
+    fill = "#69b3a2",        # 柔和蓝绿色
+    color = "white",
+    alpha = 0.9
+  ) +
+  geom_density(
+    linewidth = 1.2,
+    color = "#1a5276",       # 深蓝绿色密度线
+    alpha = 0.7
+  ) +
+  labs(
+    title = "Distribution of Jaccard Index Across Scales",
+    subtitle = "Each value represents overlap between two scales",
+    x = "Jaccard Index",
+    y = "Density"
+  ) +
+  papaja::theme_apa() +
+  theme(
+    text = element_text(family = "serif", size = 16),
+    plot.title = element_text(size = 20, face = "bold"),
+    plot.subtitle = element_text(size = 14, face = "italic"),
+    panel.grid.major = element_line(color = "grey85"),
+    panel.grid.minor = element_blank()
+  )
+
+# ============================================================
+# 3. Save Figure
+# ============================================================
+ggsave(
+  filename = here::here("FIGURE", "2_Heatmap_Distribution_APA.png"),
+  plot = p,
+  width = 10,
+  height = 7,
+  dpi = 300
+)
+
+# ============================================================
+# 4. Clean Up
+# ============================================================
+rm(df_ji, ji_values, df_hist, p)
+
+
+
+
+
+
+```
+
+```{r}
+# 画分布图中文版
+# ============================================================
+# 0. Load Required Libraries
+# ============================================================
+library(dplyr)
+library(ggplot2)
+library(papaja)
+library(here)
+
+# ============================================================
+# 1. Load Data
+# ============================================================
+df_ji <- read.csv(here::here("DATA", "Jaccard_Index_ratio.csv"), 
+                  check.names = FALSE, row.names = 1)
+
+# 去掉非数值列
+df_ji <- df_ji %>% dplyr::select(where(is.numeric)) %>% as.matrix()
+
+# 去掉对角线（自身重叠度=1）
+diag(df_ji) <- NA
+
+# 取上三角部分（避免重复）
+ji_values <- df_ji[upper.tri(df_ji, diag = FALSE)]
+
+# 去掉 NA
+ji_values <- ji_values[!is.na(ji_values)]
+
+# 转换为数据框
+df_hist <- data.frame(Jaccard = ji_values)
+
+# ============================================================
+# 2. Plot Distribution (APA Style)
+# ============================================================
+p <- ggplot(df_hist, aes(x = Jaccard)) +
+  geom_histogram(
+    bins = 25,
+    aes(y = after_stat(density)),
+    fill = "#69b3a2",        # 柔和蓝绿色
+    color = "white",
+    alpha = 0.9
+  ) +
+  geom_density(
+    linewidth = 1.2,
+    color = "#1a5276",       # 深蓝绿色密度线
+    alpha = 0.7
+  ) +
+  labs(
+    title = "量表间重合度分布",
+    subtitle = "每个数值表示两个量表之间的症状重合程度",
+    x = "重合度",
+    y = "概率密度"
+  ) +
+  papaja::theme_apa() +
+  theme(
+    text = element_text(family = "serif", size = 16),
+    plot.title = element_text(size = 20, face = "bold"),
+    plot.subtitle = element_text(size = 14, face = "italic"),
+    panel.grid.major = element_line(color = "grey85"),
+    panel.grid.minor = element_blank()
+  )
+
+# ============================================================
+# 3. Save Figure
+# ============================================================
+ggsave(
+  filename = here::here("FIGURE", "2_Heatmap_Distribution_APA.png"),
+  plot = p,
+  width = 10,
+  height = 7,
+  dpi = 300
+)
+
+# ============================================================
+# 4. Clean Up
+# ============================================================
+rm(df_ji, ji_values, df_hist, p)
+
+```
+
+
+
+```{r}
 # 量表频率
 ###############################################################################
 
@@ -440,6 +618,52 @@ ggplot2::ggsave(
   width = 12,
   height = 9
 )
+
+
+```
+
+
+```{r}
+
+library(boot)
+library(readxl)
+library(here)
+# 相关分析
+# 导入数据
+data <- readxl::read_excel(here::here("data", "Correlation.xlsx"))
+
+# 确保列是数值型
+data$symptom <- as.numeric(data$symptom)
+data$length <- as.numeric(data$length)
+data$meanoverlap <- as.numeric(data$meanoverlap)  # 修正为小写的 meanoverlap
+
+# 定义自举函数
+bootstrap_corr <- function(data, indices, var1, var2) {
+  d <- data[indices, ]  # 选择自举采样的行
+  return(cor(d[[var1]], d[[var2]], method = "spearman"))
+}
+
+# 计算并打印三组斯皮尔曼相关系数及其自举置信区间
+pairs <- list(c("symptom", "length"), c("symptom", "meanoverlap"), c("length", "meanoverlap"))
+
+for (pair in pairs) {
+  var1 <- pair[1]
+  var2 <- pair[2]
+  
+  # 计算斯皮尔曼相关
+  spearman_corr <- cor(data[[var1]], data[[var2]], method = "spearman")
+  
+  # 进行2000次自举
+  set.seed(123)
+  boot_results <- boot(data = data, statistic = function(data, indices) bootstrap_corr(data, indices, var1, var2), R = 2000)
+  
+  # 获取自举区间
+  boot_ci <- boot.ci(boot_results, type = "perc")
+  
+  # 打印结果
+  cat("\n", var1, "and", var2, "Spearman Correlation:", spearman_corr, "\n")
+  print(boot_ci)
+}
 
 
 ```
