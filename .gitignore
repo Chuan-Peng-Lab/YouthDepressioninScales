@@ -7,6 +7,7 @@
 # ignore r-related files
 .Rhistory
 .RData
+.Rproj.user/
 
 **/更新说明.txt
 
