@@ -35,8 +35,8 @@ PsyArxiv: https://osf.io/preprints/psyarxiv/scb6v_v1/
 │   ├── 2_9_Measurement data
 │   └── ReadMe.md
 ├── 3_Analysis
-│   ├── 3_1_Content_Analysis_Plot_&_Jaccard_Index
-│   ├── 3_2_Measurement_data_analysis
+│   ├── 3_1_Content_Analysis
+│   ├── 3_2_Empirical_Data_Analysis
 │   └── README.md
 ├── 4_Reports
 │   ├── About.txt
