@@ -1,0 +1,354 @@
+---
+title: "Untitled"
+author: "why"
+date: "2025-11-15"
+output: html_document
+---
+
+```{r}
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(here)
+library(openxlsx)
+
+#==========================================================
+# 1. 读取数据
+#==========================================================
+raw <- read_excel(here("DATA", "Rawdata1.xlsx"))
+cmp <- read_excel(here("DATA", "Complains_YoungClients.xls"))
+
+# 强制 ID 字段为字符
+raw$ID <- as.character(raw$ID)
+cmp$门诊ID <- as.character(cmp$门诊ID)
+
+#==========================================================
+# 2. 解析 Raw 的提交时间（英文格式 + 数字格式）
+#==========================================================
+
+# 去掉 " CST"
+raw$提交时间_clean <- gsub(" CST", "", raw$提交时间, fixed = TRUE)
+
+# 创建解析结果列
+raw$提交时间_parsed <- NA
+
+# --- 英文格式 (例: Wed May 25 14:04:35 2022) ---
+idx_eng <- grepl("[A-Za-z]{3} [A-Za-z]{3} [0-9]{1,2}", raw$提交时间_clean)
+
+old_locale <- Sys.getlocale("LC_TIME")
+Sys.setlocale("LC_TIME", "C")   # 切到英文环境，识别 Wed / May
+
+raw$提交时间_parsed[idx_eng] <- as.POSIXct(
+  raw$提交时间_clean[idx_eng],
+  format = "%a %b %d %H:%M:%S %Y",
+  tz = "Asia/Shanghai"
+)
+
+Sys.setlocale("LC_TIME", old_locale)  # 解析完恢复
+
+# --- 数字格式 (例: 2023-06-17 10:11:28) ---
+idx_num <- grepl("^\\d{4}-\\d{2}-\\d{2}", raw$提交时间_clean)
+
+raw$提交时间_parsed[idx_num] <- as.POSIXct(
+  raw$提交时间_clean[idx_num],
+  format = "%Y-%m-%d %H:%M:%S",
+  tz = "Asia/Shanghai"
+)
+
+#==========================================================
+# 3. 解析 Complains 的就诊日期
+#==========================================================
+cmp$就诊日期_parsed <- as.POSIXct(
+  cmp$就诊日期,
+  format = "%Y/%m/%d %H:%M:%S",
+  tz = "Asia/Shanghai"
+)
+
+#==========================================================
+# 4. ID 分类
+#==========================================================
+common_ids <- intersect(raw$ID, cmp$门诊ID)
+only_raw_ids <- setdiff(raw$ID, cmp$门诊ID)
+only_cmp_ids <- setdiff(cmp$门诊ID, raw$ID)
+
+#==========================================================
+# 5. 共同 ID —— Raw & Complains 时间最接近的一对
+#==========================================================
+matched_pairs <- raw %>%
+  filter(ID %in% common_ids) %>%
+  left_join(cmp, by = c("ID" = "门诊ID")) %>%
+  mutate(
+    time_diff = abs(as.numeric(
+      difftime(提交时间_parsed, 就诊日期_parsed, units = "secs")
+    )),
+    time_diff = ifelse(is.na(time_diff), Inf, time_diff)
+  ) %>%
+  group_by(ID) %>%                          # 每个 ID 只留一行（时间最近）
+  slice_min(time_diff, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+#==========================================================
+# 6. Raw 独有 ID —— 保留提交时间最早
+#==========================================================
+raw_only <- raw %>%
+  filter(ID %in% only_raw_ids) %>%
+  group_by(ID) %>%
+  slice_min(提交时间_parsed, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+#==========================================================
+# 7. Complains 独有 ID —— 保留最早就诊时间
+#==========================================================
+cmp_only <- cmp %>%
+  filter(门诊ID %in% only_cmp_ids) %>%
+  group_by(门诊ID) %>%
+  slice_min(就诊日期_parsed, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+#==========================================================
+# 8. 组合 Raw 输出数据：每个 Raw ID 一行
+#==========================================================
+Raw_output <- bind_rows(
+  matched_pairs %>% select(any_of(names(raw))),  # 共同 ID 的 Raw 行
+  raw_only                                      # Raw 独有 ID
+)
+
+#==========================================================
+# 9. 组合 Complains 输出数据：每个 门诊ID 一行
+#==========================================================
+# 先准备一份“来自 matched_pairs 的 Complains 视角”：把 ID 当成 门诊ID 用
+cmp_cols <- names(cmp)
+
+cmp_from_matched <- matched_pairs %>%
+  mutate(门诊ID = ID) %>%            # 加回 Complains 的键
+  select(all_of(cmp_cols))           # 按 Complains 原始列顺序取列
+
+# 再和 Complains 独有的行拼在一起
+Cmp_output <- bind_rows(
+  cmp_from_matched,
+  cmp_only
+)
+
+#==========================================================
+# 10. 输出 Excel 文件（不会乱码）
+#==========================================================
+write.xlsx(Raw_output,
+           here("OUTPUT", "Raw_output.xlsx"),
+           overwrite = TRUE)
+
+write.xlsx(Cmp_output,
+           here("OUTPUT", "Complains_output.xlsx"),
+           overwrite = TRUE)
+
+cat("全部处理完成！Excel 文件已生成到 OUTPUT 文件夹（两个文件各自每个 ID 只保留一行）。\n")
+
+```
+
+```{r}
+# 验证上面代码是否有问题
+# 1.1 提交时间解析情况（Raw）
+sum(is.na(raw$提交时间_parsed))
+
+# 1.2 就诊日期解析情况（Complains）
+sum(is.na(cmp$就诊日期_parsed))
+
+# 原始 Raw 里一共有多少个不同 ID
+length(unique(raw$ID))
+
+# 输出的 Raw_output 里行数
+nrow(Raw_output)
+
+# 输出里是否有重复 ID（TRUE 就有问题，FALSE 才对）
+any(duplicated(Raw_output$ID))
+
+
+# 原始 Complains 里一共有多少个不同 门诊ID
+length(unique(cmp$门诊ID))
+
+# 输出 Complains 文件的行数
+nrow(Cmp_output)
+
+# 是否有重复 门诊ID
+any(duplicated(Cmp_output$门诊ID))
+
+
+# 有多少个共同的 ID
+length(common_ids)
+
+# matched_pairs 里有多少行
+nrow(matched_pairs)
+
+
+# 验证规则是否正确
+# 是否每个共同 ID 只出现一行
+any(duplicated(matched_pairs$ID))
+
+raw_multi_ids <- raw %>%
+  count(ID) %>%
+  filter(n > 1)
+
+raw_multi_ids
+
+# RAW 中出现多次的 ID
+raw_multi_ids <- raw %>%
+    count(ID) %>%
+    filter(n > 1) %>%
+    pull(ID)
+
+# 这些多次 ID 中哪些是 Complains 没有的？
+raw_multi_only_raw <- setdiff(raw_multi_ids, cmp$门诊ID)
+
+# 输出这类 ID
+raw_multi_only_raw
+
+
+```
+
+
+```{r}
+# 查看诊断的类型
+
+unique(comp$诊断)
+
+##只保留抑郁有关的
+# 筛选诊断列包含任意关键词的行
+# ================================
+
+keywords <- c("抑郁")
+dep_related <- comp %>%
+  filter(
+    !is.na(诊断),   # 去掉诊断缺失的行
+    str_detect(诊断, paste(keywords, collapse = "|"))
+  )
+
+# ================================
+# 输出结果
+# ================================
+cat("与抑郁相关的记录数量：", nrow(dep_related), "\n\n")
+
+cat("去重后的诊断名称有：\n")
+print(unique(dep_related$诊断))
+
+
+
+# 统计与抑郁相关的唯一 ID
+unique_dep_ids <- unique(dep_related$门诊ID)
+
+cat("\n包含抑郁诊断的独立 ID 数量：", length(unique_dep_ids), "\n")
+
+
+writexl::write_xlsx(
+  dep_related,
+  here::here("OUTPUT", "Depression_related_diagnosis.xlsx")
+)
+```
+
+
+
+
+```{r}
+# 随机抽取1000人
+library(dplyr)
+library(readxl)
+library(here)
+library(writexl)
+library(stringr)
+
+# ====================================================
+# 读取数据
+# ====================================================
+dep <- read_excel(here("OUTPUT", "Depression_related_diagnosis.xlsx"))
+
+# ====================================================
+# 1. 保留现病史有内容的行
+#    条件：非 NA & 非空字符串
+# ====================================================
+dep2 <- dep %>%
+  filter(!is.na(现病史)) %>%                # 去掉 NA
+  filter(str_trim(现病史) != "")           # 去掉 "" 或空格
+
+# ====================================================
+# 2. 同一 ID + 完全相同现病史 → 保留 1 行
+# ====================================================
+dep_unique <- dep2 %>%
+  distinct(门诊ID, 现病史, .keep_all = TRUE)
+
+# ====================================================
+# 3. 抽取 1000 个 ID（如果不足 1000 会报错，我也可帮你写自动处理版本）
+# ====================================================
+set.seed(123)
+sample_ids <- dep_unique %>%
+  distinct(门诊ID) %>%
+  slice_sample(n = 1000) %>%    # 抽取 1000 个不同 ID
+  pull(门诊ID)
+
+# ====================================================
+# 4. 返回这 1000 人的数据（每个 ID 只有 1 行，因为上面已去重）
+# ====================================================
+final_sample <- dep_unique %>%
+  filter(门诊ID %in% sample_ids)
+
+# ====================================================
+# 5. 保存结果
+# ====================================================
+writexl::write_xlsx(
+  final_sample,
+  here("OUTPUT", "Depression_1000_ID_with_history.xlsx")
+)
+
+cat("✔ 已成功筛选并抽取 1000 个 ID，输出文件：OUTPUT/Depression_1000_ID_with_history.xlsx\n")
+
+length(sample_ids)
+
+
+
+# 抽30人
+# 1. 读取已经筛选好的抑郁相关数据
+dep <- read_excel(here("OUTPUT", "Depression_related_diagnosis.xlsx"))
+
+# 2. 仅保留现病史有内容的（非空、非NA、非全空白）
+dep_clean <- dep %>%
+  filter(
+    !is.na(现病史),
+    trimws(现病史) != ""
+  )
+
+# 3. 同一 ID 下现病史可能重复 —— 去重
+dep_clean <- dep_clean %>%
+  distinct(门诊ID, 现病史, .keep_all = TRUE)
+
+# 4. 随机抽取 30 个 ID
+set.seed(123)   # 可重复性
+sample_ids_30 <- sample(unique(dep_clean$门诊ID), 30)
+
+# 5. 获取这 30 个 ID 的完整行（每人只保留一行，因为已去重）
+sample_30 <- dep_clean %>%
+  filter(门诊ID %in% sample_ids_30)
+
+# 6. 输出信息
+cat("成功抽取 30 个 ID。\n\n")
+
+cat("抽取的 ID 有：\n")
+print(sample_ids_30)
+
+# 7. 保存文件
+writexl::write_xlsx(
+  sample_30,
+  here("OUTPUT", "症状_关键词提取_30人样本.xlsx")
+)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
