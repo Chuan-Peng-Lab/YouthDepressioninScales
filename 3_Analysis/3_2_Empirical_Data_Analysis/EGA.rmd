@@ -18,14 +18,6 @@ output: html_document
 
 # 上为数据预处理，下面开始正式检验。
 
-# 8: 我们对问卷内部的题目进行了合并，并且在跨问卷中认为一些题目是测量同一症状的。
-# 因此，这些特定题目之间的相关，应该高于其他题目的相关。
-# 对此，我们对特定题目的相关系数和其他题目的相关系数进行了Z检验。
-# 大部分特定题目的相关系数是高于其他的，详细结果见8及8.1。
-
-
-# 9：我们认为儿童青少年不同问卷之间的检出率应该有差异。因此进行了检出率计算。
-# 结果显示：CDI的检出率为49.25，DSRSC的检出率为52.12.PHQ-9的检出率为53.46.
 
 
 # 10：我们想要探究不同症状之间可以形成多少个cluster，因此进行了Exploratory Graph Analysis
@@ -43,7 +35,7 @@ library(papaja)
 
 ```{r}
 # 1. 载入数据
-raw_data <- bruceR::import(here::here("data", "Rawdata1.xlsx"))
+raw_data <- bruceR::import(here::here("data", "Raw_output.xlsx"))
 
 selected_data <- raw_data %>%
   select(ID, Gender, Age, 
@@ -195,8 +187,12 @@ summary(unmerge_ega)
 
 ```
 
+
 ```{r}
 # Perform Bootstrap EGA
+
+png("figure/unmergebootEGA.png", width = 3300, height = 2000, res = 300)
+
 unmerge_boot <- bootEGA(
   data = unmerge_uva$reduced_data,
   seed = 1 # set seed for reproducibility
@@ -275,6 +271,10 @@ new_2_network_data <- network_data %>%
          Retardation_and_agitation, Blue, Interest_loss, 
          Feeling_of_worthlessness)
 
+# 保存新的数据框为Excel文件
+library(writexl)
+write_xlsx(new_2_network_data, "data/new_2_network_data.xlsx")
+
 ```
 
 
@@ -300,7 +300,7 @@ merge_uva$keep_remove  # 查看哪些变量需要保留（keep）或删除（rem
 
 png("figure/EGA_network_plot_merge.png", width = 3300, height = 2000, res = 300)  # 设置分辨率为300 DPI
 # 基于Unique Variable Analysis结果进行EGA分析
-merge_ega <- EGA(data = merge_uva$reduced_data,plot.EGA = TRUE, label.size = 2,legend.names = c("Dimension 1", "Dimension 2", "Dimension 3"),
+merge_ega <- EGA(data = merge_uva$reduced_data,plot.EGA = TRUE, label.size = 2,legend.names = c("Dimension 1", "Dimension 2", "Dimension 3", "Dimension 4"),
                  node.size = 15)  # 使用排除掉唯一变量后的数据
 
 # 查看EGA分析结果
@@ -314,9 +314,10 @@ png("figure/bootEGA_results.png", width = 3300, height = 2000, res = 300)
 
 merge_boot <- bootEGA(
   data = merge_uva$reduced_data,
-  seed = 1 # set seed for reproducibility
+  seed = 1, # set seed for reproducibility
 )
 dimensionStability(merge_boot)
+
 
 
 ```
@@ -325,10 +326,10 @@ dimensionStability(merge_boot)
 ```{r}
 # 第一次移除0.7以下的继续EGA
 
-# 从数据中移除不需要的列
+# 从数据中移除新的不需要的列
 new_2_network_data_filtered <- new_2_network_data %>%
-  select(-Bad_all_the_time, -Indecisiveness, -Get_into_fights_all_the_time, -Never_do_what_I_am_told, -Lack_of_friends, -Suicidal_ideation )
-
+  select(-Suicidal_ideation, -Interest_loss, -Never_do_what_I_am_told, 
+         -Get_into_fights_all_the_time, -Lack_of_friends) 
 # 执行Unique Variable Analysis（唯一变量分析）
 merge_uva_filtered <- UVA(
   data = new_2_network_data_filtered,  # 使用去除列后的数据
@@ -337,6 +338,7 @@ merge_uva_filtered <- UVA(
 
 # 查看结果
 merge_uva_filtered$keep_remove  # 查看哪些变量需要保留（keep）或删除（remove）
+
 # 设置图像保存路径并绘制EGA网络图
 png("figure/EGA_network_plot_filtered.png", width = 3300, height = 2000, res = 300)
 
@@ -346,6 +348,7 @@ merge_ega_filtered <- EGA(
   data = merge_uva_filtered$reduced_data,  # 使用排除掉不需要列后的数据
   plot.EGA = TRUE,
   label.size = 2,
+  legend.names = c("Dimension 1", "Dimension 2", "Dimension 3"),
   node.size = 15  # 节点大小
 )
 
@@ -374,9 +377,11 @@ dimensionStability(merge_boot_filtered)
 # 第二次移除Feeling_of_failure列
 
 new_2_network_data_filtered_second <- new_2_network_data %>%
-  select(-Bad_all_the_time, -Indecisiveness, -Get_into_fights_all_the_time, 
-         -Never_do_what_I_am_told, -Lack_of_friends, -Suicidal_ideation, 
-         -Feeling_of_failure)  # 第二次移除Feeling_of_failure
+  select(-Suicidal_ideation, -Interest_loss, -Never_do_what_I_am_told, 
+         -Get_into_fights_all_the_time, -Lack_of_friends,  # 按照新的稳定性结果删除这些变量
+         -Feeling_of_failure) # 第二次移除Feeling_of_failure
+
+
 
 # 执行Unique Variable Analysis（唯一变量分析）
 merge_uva_filtered_second <- UVA(
@@ -418,14 +423,87 @@ dimensionStability(merge_boot_filtered_second)
 
 ```
 
-```{r}
-# boot与实证数据的比较
-png("figure/merge_compare.png", width = 4000, height = 6000, res = 300)
 
-merge_compare <- compare.EGA.plots(
-  merge_ega_filtered_second, merge_boot_filtered_second,
-  labels = c("Empirical", "Bootstrap")
+
+```{r}
+# 更改名字
+# 创建更新后的映射字典，将原始列名映射为新的简洁列名
+column_mapping <- c(
+  "Sad" = "M1", 
+  "Anhedonia" = "M2", 
+  "Psychological_worry" = "M3", 
+  "Cry" = "M4", 
+  "Psychic_anxiety" = "M5", 
+  "Fatigue" = "M6", 
+  "Appetite_change" = "M7", 
+  "Somatic_worry" = "M8", 
+  "Feeling_of_loneliness" = "M9", 
+  "Poor_sleep" = "M10", 
+  "Gastrointestinal" = "M11", 
+  "Low_mood" = "M12", 
+  "Blue" = "M13", 
+  "Feeling_of_hopelessness" = "C1",
+  "Psychological_inferiority" = "C2",
+  "Self_blame" = "C3",
+  "Felt_people_disliked_me" = "C4",
+  "Running_away_from_home" = "C5",
+  "Interest_pleasure_loss" = "C6",
+  "Feeling_of_worthlessness" = "C7",
+  "Negative_body_perception" = "C8",
+  "Like_talking_with_family" = "C9",
+  "Reduced_socialization" = "C10",
+  "Inferiority_self_confidence" = "C11",
+  "Bad_all_the_time" = "C12",
+  "Learning_difficulties" = "F1",  # F组按顺序1-6排列
+  "Loss_of_energy" = "F2",
+  "Concentration" = "F3",
+  "Retardation_and_agitation" = "F4",
+  "Never_have_fun_at_school" = "F5",
+  "Indecisiveness" = "F6"
 )
+
+# 创建一个新的数据框并为其赋予原始数据
+new_2_network_data_filtered_renamed <- new_2_network_data_filtered_second
+
+# 获取需要更改列名的列（这些列在映射字典中有定义）
+cols_to_rename <- intersect(colnames(new_2_network_data_filtered_renamed), names(column_mapping))
+
+# 只对需要修改列的列名进行修改
+colnames(new_2_network_data_filtered_renamed)[colnames(new_2_network_data_filtered_renamed) %in% cols_to_rename] <- column_mapping[cols_to_rename]
+
+# 查看新的数据框的列名
+colnames(new_2_network_data_filtered_renamed)
+
+# 执行 Unique Variable Analysis（唯一变量分析）
+merge_uva_filtered_renamed <- UVA(
+  data = new_2_network_data_filtered_renamed,  # 使用重命名后的数据
+  key = colnames(new_2_network_data_filtered_renamed)  # 使用变量名作为key
+)
+
+# 查看结果
+
+merge_uva_filtered_renamed 
+merge_uva_filtered_renamed$keep_remove  # 查看哪些变量需要保留（keep）或删除（remove）
+
+# 设置图像保存路径并绘制更美观的 EGA 网络图
+png("figure/EGA_network_plot_filtered_renamed.png", width = 3300, height = 2000, res = 300)
+
+# 基于 Unique Variable Analysis 结果进行 EGA 分析
+merge_ega_filtered_renamed <- EGA(
+  data = merge_uva_filtered_renamed$reduced_data,  # 使用排除掉不需要列后的数据
+  plot.EGA = TRUE,
+  label.size = 3,  # 增加标签的大小以便阅读
+  legend.names = c("MOOD", "COGNITION", "FUNCTION"),
+  node.size = 18,  # 增加节点大小让图形更清晰
+  edge.width = 2,  # 增加边的宽度使关系更加清晰
+
+)
+
+# 关闭图像设备
+dev.off()
+
+# 查看 EGA 分析结果
+summary(merge_ega_filtered_renamed)
 
 
 ```
@@ -433,44 +511,3 @@ merge_compare <- compare.EGA.plots(
 
 
 
-
-```{r}
-# 筛选数据进行验证
-# 挑选指定的症状
-selected_symptoms <- new_2_network_data %>%
-  select(Cry, Psychic_anxiety, Fatigue, Appetite_change, Somatic_worry, 
-         Feeling_of_loneliness, Poor_sleep, Gastrointestinal, Low_mood, 
-         Blue, Sad, Anhedonia, Psychological_worry)
-
-# 检查挑选后的数据
-head(selected_symptoms)
-
-# 重新进行EGA分析
-library(EGAnet)
-
-# 执行Unique Variable Analysis（唯一变量分析）
-selected_uva <- UVA(
-  data = selected_symptoms,  # 使用挑选后的数据集
-  key = colnames(selected_symptoms)  # 使用变量名作为key
-)
-
-# 打印UVA分析结果
-selected_uva$keep_remove  # 查看保留（keep）和删除（remove）的变量
-
-# 保存EGA网络图
-png("figure/EGA_network_plot_selected.png", width = 3300, height = 2000, res = 300)  # 设置分辨率为300 DPI
-
-# 基于Unique Variable Analysis结果进行EGA分析
-selected_ega <- EGA(
-  data = selected_symptoms, 
-  plot.EGA = TRUE, 
-  label.size = 2, 
-  node.size = 15
-)
-
-# 查看EGA分析结果
-summary(selected_ega)
-
-
-
-```

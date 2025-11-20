@@ -18,18 +18,8 @@ output: html_document
 
 # 上为数据预处理，下面开始正式检验。
 
-# 8: 我们对问卷内部的题目进行了合并，并且在跨问卷中认为一些题目是测量同一症状的。
-# 因此，这些特定题目之间的相关，应该高于其他题目的相关。
-# 对此，我们对特定题目的相关系数和其他题目的相关系数进行了Z检验。
-# 大部分特定题目的相关系数是高于其他的，详细结果见8及8.1。
 
-
-# 9：我们认为儿童青少年不同问卷之间的检出率应该有差异。因此进行了检出率计算。
-# 结果显示：CDI的检出率为49.25，DSRSC的检出率为52.12.PHQ-9的检出率为53.46.
-
-
-# 10：我们想要探究不同症状之间可以形成多少个cluster，因此进行了Exploratory Graph Analysis
-# 由于不同问卷之间的题目，可能测量的是同一个症状，因此我们对其进行了合并，以取均值的形式，合并了不同问卷之间的题目。
+# 8：我们认为儿童青少年不同问卷之间的检出率应该有差异。因此进行了检出率计算。
 
 
 # 载入必要的包
@@ -42,8 +32,9 @@ library(papaja)
 ```
 
 ```{r}
+# 载入的数据是经过删除相同ID多条记录的数据，代码在预处理
 # 1. 载入数据
-raw_data <- bruceR::import(here::here("data", "Rawdata1.xlsx"))
+raw_data <- bruceR::import(here::here("data", "Raw_output.xlsx"))
 
 selected_data <- raw_data %>%
   select(ID, Gender, Age, 
@@ -329,25 +320,7 @@ p2 <- ggplot(group_counts, aes(area = count, fill = level, label = paste0(group,
 ggsave(here::here("figure", "treemap_ordered.png"), width = 10, height = 6, dpi = 300)
 
 
-
-# 导出不同条件的ID
-# 给每个人标上总的检出类别（0,1,2,3,4）
-detection_flags <- detection_flags %>%
-  mutate(detected_category = paste0(total_detected, "_detected"))
-
-# 按类别把 ID 分开，并导出到 Excel
-ids_by_category <- split(reversed_data[, c("ID", "Gender", "Age")], detection_flags$detected_category)
-
-output_file <- here::here("output", "IDs_by_detected_category.xlsx")
-openxlsx::write.xlsx(ids_by_category, file = output_file)
-cat("不同检出类别的 ID 已导出到:", output_file, "\n")
-
-
-
 ```
-
-
-
 
 
 
@@ -484,199 +457,7 @@ ggsave(here::here("figure", "final_combined_plot.png"),
 
 
 
-```{r}
-# 计算不同年龄的检出率，以及不同条件下检出影响人数，并且可视化。
-# CDI可能有问题，算了26题。
-# 创建年龄段数据
-age_groups <- list(
-  "7-12" = 7:12,
-  "13-15" = 13:15,
-  "16-18" = 16:18
-)
 
-# 创建数据框存储每个年龄段的检出率
-age_detection_rates <- data.frame(
-  Age_Group = character(0),
-  Measure = character(0),
-  Detection_Rate = numeric(0)
-)
-
-# 创建数据框存储不同年龄段的特定检出个体
-specific_detection_counts <- data.frame(
-  Age_Group = character(0),
-  PHQ_Detected_only = integer(0),
-  CDI_Detected_only = integer(0),
-  DSRSC_Detected_only = integer(0),
-  DASS_Detected_only = integer(0),
-  stringsAsFactors = FALSE
-)
-
-# 循环遍历每个年龄段
-for (age_group in names(age_groups)) {
-  age_range <- age_groups[[age_group]]
-  
-  # 根据年龄筛选数据
-  age_data <- reversed_data[reversed_data$Age %in% age_range, ]
-  
-  # 计算每个测量工具的检出率
-  detected_DSRSC_age <- sum(rowSums(age_data[, grep("^DSRSC", names(age_data))]) >= cutoff_DSRSC)
-  detected_PHQ_age <- sum(rowSums(age_data[, grep("^PHQ", names(age_data))]) >= cutoff_PHQ)
-  detected_CDI_age <- sum(rowSums(age_data[, grep("^CDI", names(age_data))]) >= cutoff_CDI)
-  detected_DASS_male_age <- sum(rowSums(age_data[age_data$Gender == 1, grep("^DASS", names(age_data))]) >= cutoff_DASS_male)
-  detected_DASS_female_age <- sum(rowSums(age_data[age_data$Gender == 2, grep("^DASS", names(age_data))]) >= cutoff_DASS_female)
-  detected_DASS_age <- detected_DASS_male_age + detected_DASS_female_age
-  
-  # 总样本数
-  total_age_count <- nrow(age_data)
-  
-  # 检出率
-  detection_rate_DSRSC_age <- (detected_DSRSC_age / total_age_count) * 100
-  detection_rate_PHQ_age <- (detected_PHQ_age / total_age_count) * 100
-  detection_rate_CDI_age <- (detected_CDI_age / total_age_count) * 100
-  detection_rate_DASS_age <- (detected_DASS_age / total_age_count) * 100
-  
-  # 添加检出率数据
-  age_detection_rates <- rbind(age_detection_rates, 
-                               data.frame(Age_Group = age_group, 
-                                          Measure = "DSRSC", 
-                                          Detection_Rate = detection_rate_DSRSC_age))
-  age_detection_rates <- rbind(age_detection_rates, 
-                               data.frame(Age_Group = age_group, 
-                                          Measure = "PHQ-9", 
-                                          Detection_Rate = detection_rate_PHQ_age))
-  age_detection_rates <- rbind(age_detection_rates, 
-                               data.frame(Age_Group = age_group, 
-                                          Measure = "CDI", 
-                                          Detection_Rate = detection_rate_CDI_age))
-  age_detection_rates <- rbind(age_detection_rates, 
-                               data.frame(Age_Group = age_group, 
-                                          Measure = "DASS", 
-                                          Detection_Rate = detection_rate_DASS_age))
-  
-  # 计算特定检出个体并输出
-  cat("\n计算特定检出个体：\n")
-  
-  # 根据性别设置DASS的cutoff值
-  age_data$DASS_cutoff <- ifelse(age_data$Gender == 1, cutoff_DASS_male, cutoff_DASS_female)
-  
-  # PHQ-9检出，但DSRSC、CDI和DASS未检出的人
-  specific_phq_positive <- age_data[total_PHQ_scores[reversed_data$Age %in% age_range] >= cutoff_PHQ & 
-                                    total_DSRSC_scores[reversed_data$Age %in% age_range] < cutoff_DSRSC & 
-                                    total_CDI_scores[reversed_data$Age %in% age_range] < cutoff_CDI & 
-                                    total_DASS_scores[reversed_data$Age %in% age_range] < age_data$DASS_cutoff, ]
-  cat(paste("年龄段", age_group, "在PHQ-9检出，但DSRSC、CDI和DASS未检出的人数:", nrow(specific_phq_positive), "\n"))
-  if (nrow(specific_phq_positive) > 0) {
-    print(specific_phq_positive)
-  }
-
-  # CDI检出，但PHQ-9、DSRSC和DASS未检出的人
-  specific_cdi_positive <- age_data[total_CDI_scores[reversed_data$Age %in% age_range] >= cutoff_CDI & 
-                                    total_PHQ_scores[reversed_data$Age %in% age_range] < cutoff_PHQ & 
-                                    total_DSRSC_scores[reversed_data$Age %in% age_range] < cutoff_DSRSC & 
-                                    total_DASS_scores[reversed_data$Age %in% age_range] < age_data$DASS_cutoff, ]
-  cat(paste("年龄段", age_group, "在CDI检出，但PHQ-9、DSRSC和DASS未检出的人数:", nrow(specific_cdi_positive), "\n"))
-  if (nrow(specific_cdi_positive) > 0) {
-    print(specific_cdi_positive)
-  }
-
-  # DSRSC检出，但PHQ-9、CDI和DASS未检出的人
-  specific_dsrsc_positive <- age_data[total_DSRSC_scores[reversed_data$Age %in% age_range] >= cutoff_DSRSC & 
-                                      total_PHQ_scores[reversed_data$Age %in% age_range] < cutoff_PHQ & 
-                                      total_CDI_scores[reversed_data$Age %in% age_range] < cutoff_CDI & 
-                                      total_DASS_scores[reversed_data$Age %in% age_range] < age_data$DASS_cutoff, ]
-  cat(paste("年龄段", age_group, "在DSRSC检出，但PHQ-9、CDI和DASS未检出的人数:", nrow(specific_dsrsc_positive), "\n"))
-  if (nrow(specific_dsrsc_positive) > 0) {
-    print(specific_dsrsc_positive)
-  }
-
-  # DASS检出，但PHQ-9、CDI和DSRSC未检出的人
-  specific_dass_positive <- age_data[total_DASS_scores[reversed_data$Age %in% age_range] >= age_data$DASS_cutoff & 
-                                     total_PHQ_scores[reversed_data$Age %in% age_range] < cutoff_PHQ & 
-                                     total_CDI_scores[reversed_data$Age %in% age_range] < cutoff_CDI & 
-                                     total_DSRSC_scores[reversed_data$Age %in% age_range] < cutoff_DSRSC, ]
-  cat(paste("年龄段", age_group, "在DASS检出，但PHQ-9、CDI和DSRSC未检出的人数:", nrow(specific_dass_positive), "\n"))
-  if (nrow(specific_dass_positive) > 0) {
-    print(specific_dass_positive)
-  }
-  
-  # 将各个年龄段的特定检出个体数量添加到数据框
-  specific_detection_counts <- rbind(specific_detection_counts, data.frame(
-    Age_Group = age_group,
-    PHQ_Detected_only = nrow(specific_phq_positive),
-    CDI_Detected_only = nrow(specific_cdi_positive),
-    DSRSC_Detected_only = nrow(specific_dsrsc_positive),
-    DASS_Detected_only = nrow(specific_dass_positive)
-  ))
-}
-
-# 打印检出率和特定检出个体人数
-print(age_detection_rates)
-print(specific_detection_counts)
-```
-
-
-```{r}
-# 计算不同抑郁状况的占比
-# 计算四个量表的总分（包括 DSRSC）
-score_data <- reversed_data %>%
-  rowwise() %>%
-  mutate(
-    PHQ_total = sum(c_across(starts_with("PHQ")), na.rm = TRUE),
-    CDI_total = sum(c_across(starts_with("CDI"))[!names(.) %in% "CDI26"], na.rm = TRUE),
-    DASS_total_raw = sum(c_across(starts_with("DASS")), na.rm = TRUE),
-    DASS_total = DASS_total_raw * 2,  # Multiply DASS total by 2
-    DSRSC_total = sum(c_across(starts_with("DSRSC")), na.rm = TRUE)
-  ) %>%
-  ungroup()
-
-# 2. 根据总分范围分类抑郁状况，添加量表前缀避免标签重复
-score_data <- score_data %>%
-  mutate(
-    PHQ_status = case_when(
-      PHQ_total < 5 ~ "Minimal",
-      PHQ_total >= 5 & PHQ_total < 10 ~ "Mild(PHQ)",
-      PHQ_total >= 10 & PHQ_total < 15 ~ "Moderate(PHQ)",
-      PHQ_total >= 15 & PHQ_total < 20 ~ "Moderately Severe",
-      PHQ_total >= 20 & PHQ_total <= 27 ~ "Severe(PHQ)"
-    ),
-    CDI_status = case_when(
-      CDI_total < 19 ~ "No Symptoms",
-      CDI_total >= 19 & CDI_total < 25 ~ "Mild Symptoms",
-      CDI_total >= 25 & CDI_total <= 54 ~ "Moderate-Severe Symptoms"
-    ),
-    DASS_status = case_when(
-      DASS_total <= 9 ~ "Normal",
-      DASS_total > 9 & DASS_total <= 13 ~ "Mild",
-      DASS_total > 13 & DASS_total <= 20 ~ "Moderate",
-      DASS_total > 20 & DASS_total <= 27 ~ "Severe",
-      DASS_total > 27 & DASS_total <= 42 ~ "Extremely Severe"
-    ),
-    DSRSC_status = if_else(DSRSC_total >= 15, "Detected", "Not Detected")
-  )
-
-# 3. 数据整形以便绘图
-plot_data <- score_data %>%
-  pivot_longer(cols = c(PHQ_status, CDI_status, DASS_status, DSRSC_status), 
-               names_to = "scale", values_to = "status") %>%
-  mutate(scale = factor(scale, levels = c("PHQ_status", "CDI_status", "DASS_status", "DSRSC_status"),
-                        labels = c("PHQ-9", "CDI", "DASS", "DSRSC")))
-
-# 4. 计算每个量表各个状况的比例
-plot_data_summary <- plot_data %>%
-  group_by(scale, status) %>%
-  summarise(count = n()) %>%
-  mutate(proportion = count / sum(count) * 100) %>%
-  mutate(status = factor(status, levels = c(
-      "Minimal", "Mild(PHQ)", "Moderate(PHQ)", "Moderately Severe", "Severe(PHQ)",
-      "No Symptoms", "Mild Symptoms", "Moderate-Severe Symptoms",
-      "Normal", "Mild", "Moderate", "Severe", "Extremely Severe",
-      "Not Detected", "Detected"
-  )))
-
-# 打印各个量表各个状况的比例
-print(plot_data_summary)
-
-```
 
 
 
