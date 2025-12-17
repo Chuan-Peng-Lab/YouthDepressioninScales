@@ -6,6 +6,27 @@ output: html_document
 ---
 
 ```{r}
+# 预处理是将RAWDATA1和Complains_YoungClients（即未经处理的医生原始数据）进行处理的代码，处理规则如下：
+# 在本研究的数据预处理中，Rawdata1.xlsx 与 Complains_YoungClients.xls 两个数据表均包含重复的 ID。
+# 为了确保后续分析中每个 ID 仅保留一条最合适的记录，我们制定并实施了如下匹配与筛选规则：
+# 1. 两个数据表均出现的 ID（共同 ID）
+# 当某个 ID 同时存在于 Rawdata1 与 Complains 数据表中，且各自都可能有多条记录时：
+# 规则：找到 Raw 中每条记录与 Complains 中每条记录之间的时间差，保留时间差最小的那一对。
+# Raw 表使用字段：提交时间（parsed datetime）
+# Complains 表使用字段：就诊日期（parsed datetime）
+# 对所有组合计算时间差（绝对值，单位秒）选择时间差最小的一对 仅保留这一行 Raw 及这一行 Complains 其余记录全部删除
+# 这样保证共同 ID 在两个文件中都仅保留 最匹配的、最接近的时间点。
+# 2. 仅在 Rawdata1 中出现的 ID
+# 当某个 ID 出现在 Rawdata1 中，但不出现在 Complains 中时：
+# 规则：保留 Rawdata1 中该 ID 的所有记录里 “提交时间最早” 的一条。
+# 同时删除该 ID 的其他记录
+# 这样保证 Raw 中的独有 ID 也只保留一条最合理的数据。
+# 3. 仅在 Complains_YoungClients 中出现的 ID
+# 当某个 ID 出现在 Complains 中，但 不出现在 Rawdata1 中时：
+# 规则：保留 Complains 中该 ID 的所有记录里 “就诊日期最早” 的一条。
+# 同时删除该 ID 的其他记录
+# 这保证 Complains 中的独有 ID 也只保留一条最代表性的记录。
+# 输出数据文件为：Raw_output.xlsx 也是后续检出率和EGA载入的数据文件。
 library(readxl)
 library(dplyr)
 library(lubridate)
@@ -144,71 +165,78 @@ cat("全部处理完成！Excel 文件已生成到 OUTPUT 文件夹（两个文�
 
 ```
 
+
+
+
 ```{r}
-# 验证上面代码是否有问题
-# 1.1 提交时间解析情况（Raw）
-sum(is.na(raw$提交时间_parsed))
+# 进一步对CMP_OUTPUT进行处理
+# 1：删除现病史为空或者缺失的记录,只保留现病史有意义的记录
+# 2：只保留诊断于抑郁有关的记录
+# 3：看主诉这列，有多少人是代诊的，去掉那些父母待诊的记录
+# 第一步
+library(dplyr)
 
-# 1.2 就诊日期解析情况（Complains）
-sum(is.na(cmp$就诊日期_parsed))
+Cmp_step1 <- Cmp_output %>%
+  filter(
+    !is.na(现病史),              # 不是 NA
+    trimws(现病史) != ""         # 去掉空格后不是空
+  )
 
-# 原始 Raw 里一共有多少个不同 ID
-length(unique(raw$ID))
+cat("删除现病史为空后的样本量：", nrow(Cmp_step1), "\n")
+# 第二步
+Cmp_step2 <- Cmp_step1 %>%
+  filter(
+    !is.na(诊断),
+    grepl("抑郁", 诊断)
+  )
 
-# 输出的 Raw_output 里行数
-nrow(Raw_output)
-
-# 输出里是否有重复 ID（TRUE 就有问题，FALSE 才对）
-any(duplicated(Raw_output$ID))
-
-
-# 原始 Complains 里一共有多少个不同 门诊ID
-length(unique(cmp$门诊ID))
-
-# 输出 Complains 文件的行数
-nrow(Cmp_output)
-
-# 是否有重复 门诊ID
-any(duplicated(Cmp_output$门诊ID))
-
-
-# 有多少个共同的 ID
-length(common_ids)
-
-# matched_pairs 里有多少行
-nrow(matched_pairs)
-
-
-# 验证规则是否正确
-# 是否每个共同 ID 只出现一行
-any(duplicated(matched_pairs$ID))
-
-raw_multi_ids <- raw %>%
-  count(ID) %>%
-  filter(n > 1)
-
-raw_multi_ids
-
-# RAW 中出现多次的 ID
-raw_multi_ids <- raw %>%
-    count(ID) %>%
-    filter(n > 1) %>%
-    pull(ID)
-
-# 这些多次 ID 中哪些是 Complains 没有的？
-raw_multi_only_raw <- setdiff(raw_multi_ids, cmp$门诊ID)
-
-# 输出这类 ID
-raw_multi_only_raw
-
+cat("诊断包含“抑郁”的样本量：", nrow(Cmp_step2), "\n")
+# 第三步
+sum(grepl("代诊", Cmp_step2$主诉))
+Cmp_step3 <- Cmp_step2 %>%
+  filter(!grepl("代诊", 主诉))
 
 ```
 
 
+```{r}
+# 随机抽500个人
+library(dplyr)
+library(openxlsx)
+library(here)
+
+#================================================
+# 1. 固定随机种子（保证可复现）
+#================================================
+set.seed(123)
+
+#================================================
+# 2. 从 Cmp_step3 中随机抽取 500 人
+#================================================
+Cmp_NLP_500 <- Cmp_step3 %>%
+  sample_n(500)
+
+#================================================
+# 3. 简单校验
+#================================================
+nrow(Cmp_NLP_500)                      # 应为 500
+any(duplicated(Cmp_NLP_500$门诊ID))   # 应为 FALSE
+
+#================================================
+# 4. 导出为 Excel
+#================================================
+output_path <- here("OUTPUT", "Complains_output_depression_500.xlsx")
+
+write.xlsx(
+  Cmp_NLP_500,
+  file = output_path,
+  overwrite = TRUE
+)
+
+cat("NLP 测试样本已导出：", output_path, "\n")
 
 
-
-
+```
 
 
 
