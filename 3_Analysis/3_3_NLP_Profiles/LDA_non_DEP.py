@@ -26,8 +26,7 @@ def load_wordlist(file_path):
 
 stopwords_file = "hit_stopwords.txt"
 symptom_file   = "symptom_keywords.txt"
-data_file = "Complains_output_depression_related.xlsx"
-
+data_file = "Complains_output_non_depression.xlsx"
 
 stop_words = load_wordlist(stopwords_file)
 symptom_keywords = load_wordlist(symptom_file)
@@ -110,7 +109,7 @@ print("✅ 文本处理完成")
 # 5. 保存处理结果
 # ==========================
 result_df = pd.DataFrame.from_dict(result, orient="index")
-save_path = "processed_result_症状文本分析.xlsx"
+save_path = "processed_result_非抑郁_症状文本分析.xlsx"
 result_df.to_excel(save_path, index=False)
 print(f"✅ 结果已保存：{save_path}")
 
@@ -129,7 +128,7 @@ print("\n===== 开始进行 HanLP 词性标注（POS） =====")
 # ==========================
 # 1️⃣ 读取已保存的分词结果文件
 # ==========================
-input_file = "processed_result_症状文本分析.xlsx"
+input_file = "processed_result_非抑郁_症状文本分析.xlsx"
 result_df = pd.read_excel(input_file)
 
 print(f"✅ 读取文件成功，共 {len(result_df)} 条文本")
@@ -194,7 +193,7 @@ export_df["processed_tokens"] = export_df["processed_tokens"].apply(list_to_str)
 export_df["pos_tags"] = export_df["pos_tags"].apply(list_to_str)
 export_df["pos_bigrams"] = export_df["pos_bigrams"].apply(list_to_str)
 
-output_file = "POS_Bigram_结果查看.xlsx"
+output_file = "POS_Bigram_非抑郁_结果查看.xlsx"
 export_df.to_excel(output_file, index=False)
 
 print(f"📘 POS + POS Bigram 结果已保存：{output_file}")
@@ -215,7 +214,7 @@ print("\n===== 开始进行 HanLP 命名实体识别（NER） =====")
 # ==========================
 # 1️⃣ 读取已处理好的分词结果文件
 # ==========================
-input_file = "processed_result_症状文本分析.xlsx"
+input_file = "processed_result_非抑郁_症状文本分析.xlsx"
 result_df = pd.read_excel(input_file)
 
 print(f"✅ 读取文件成功，共 {len(result_df)} 条文本")
@@ -275,7 +274,7 @@ export_df = result_df.copy()
 export_df["processed_tokens"] = export_df["processed_tokens"].apply(list_to_str)
 export_df["named_entities"] = export_df["named_entities"].apply(list_to_str)
 
-output_file = "NER_结果查看.xlsx"
+output_file = "NER_非抑郁_结果查看.xlsx"
 export_df.to_excel(output_file, index=False)
 
 print(f"📘 NER 结果已保存：{output_file}")
@@ -290,7 +289,7 @@ import re
 from collections import Counter
 
 # 1) 只读 named_entities 这一列（更快）
-input_file = "NER_结果查看.xlsx"
+input_file = "NER_非抑郁_结果查看.xlsx"
 df = pd.read_excel(input_file, usecols=["named_entities"])
 
 # 2) 正则：抓取 ('协和医院', 'NT', 5, 6) 的前两项
@@ -316,7 +315,7 @@ entity_df = pd.DataFrame(
 ).sort_values(by="出现次数", ascending=False)
 
 # 4) 导出
-output_file = "NER_实体频次统计.xlsx"
+output_file = "NER_非抑郁_实体频次统计.xlsx"
 entity_df.to_excel(output_file, index=False)
 
 print(f"✅ 完成：共 {len(entity_df)} 个唯一实体-类型组合")
@@ -325,14 +324,14 @@ print(f"📄 已导出：{output_file}")
 entity_df.groupby("实体类型")["出现次数"].sum().sort_values(ascending=False)
 
 
-
+# LDA
 import pandas as pd
 import ast
 from gensim import corpora
 from gensim.models import LdaModel, CoherenceModel
 
 # 从已保存的分词结果读取
-lda_df = pd.read_excel("processed_result_症状文本分析.xlsx")
+lda_df = pd.read_excel("processed_result_非抑郁_症状文本分析.xlsx")
 
 # processed_tokens → list
 def parse_list(x):
@@ -447,7 +446,7 @@ import ast
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 # 1. 读取你已经处理好的结果文件
-input_file = "processed_result_症状文本分析.xlsx"
+input_file = "processed_result_非抑郁_症状文本分析.xlsx"
 df = pd.read_excel(input_file)
 
 # 2. processed_tokens：list -> 句子（空格分隔）
@@ -491,7 +490,7 @@ top_words = tfidf_sorted[:TOP_N]
 
 output_df = pd.DataFrame(top_words, columns=["候选词", "平均TF-IDF"])
 
-output_file = "TFIDF_top200_候选症状.xlsx"
+output_file = "TFIDF_非抑郁_top200_候选症状.xlsx"
 output_df.to_excel(output_file, index=False)
 
 print(f"🔥 TF-IDF 完成，已导出：{output_file}")
@@ -505,7 +504,7 @@ import ast
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 # 1. 读取已处理结果
-input_file = "processed_result_症状文本分析.xlsx"
+input_file = "processed_result_非抑郁_症状文本分析.xlsx"
 df = pd.read_excel(input_file)
 
 # 2. processed_tokens → 文本
@@ -550,7 +549,7 @@ output_df = pd.DataFrame(
     columns=["二元短语", "平均TF-IDF"]
 )
 
-output_file = "TFIDF_bigram_候选症状.xlsx"
+output_file = "TFIDF_非抑郁_bigram_候选症状.xlsx"
 output_df.to_excel(output_file, index=False)
 
 print(f"🔥 Bigram TF-IDF 完成，已导出：{output_file}")
