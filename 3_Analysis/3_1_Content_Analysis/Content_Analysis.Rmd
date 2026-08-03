@@ -240,6 +240,173 @@ ggsave(
 rm(d, num, order_data, CA_plot, rawdata, symp, scale, n_scales, n_symptoms)
 ```
 
+
+
+
+
+```{r}
+#横过来的图
+# 1_Content_Analysis
+#base
+#install.packages('tidyverse')
+#install.packages('bruceR')
+library('dplyr')
+library("tidyr")
+library("readxl")
+#plot
+#install.packages('ggplot2')
+library('ggplot2')
+
+#color
+#install.packages('viridisLite')
+#install.packages('viridis')
+library('viridisLite')
+library('viridis')
+#if you use mac OS, you should change the path of font file
+#default: simsun.ttc (songti)
+
+#Figure1.pdf display Chinese
+#install.packages('showtext')
+#install.packages('Cairo')
+#install.packages('sysfonts')
+#install.packages('showtextdb')
+library('sysfonts')
+library('showtextdb')
+library('showtext')
+library('Cairo')
+
+# 读取矩阵
+rawdata <- read_excel(here::here("DATA", "Depression_Matrix.xlsx"))
+
+n_scales  <- 28
+n_symptoms <- 84
+
+# -----------------------
+# 数据准备
+# -----------------------
+order_data <- rawdata %>%
+  select(-face, -color) %>%
+  mutate(count = rowSums(across(where(is.numeric)), na.rm = TRUE)) %>%
+  arrange(desc(count)) %>%
+  select(-count)
+
+d <- order_data %>%
+  select(-S_name) %>%
+  mutate(S = paste(1:nrow(order_data))) %>%
+  reshape2::melt(id.vars = "S", variable.name = "Scales", value.name = "Type") %>%
+  filter(Type >= 1) %>%
+  mutate(
+    Type = ifelse(Type == 1,
+                  "Scale indirectly captures symptom",
+                  "Scale directly captures symptom"),
+    S = as.numeric(S)
+  )
+
+symp <- order_data %>%
+  arrange(desc(row_number())) %>%  # 倒序症状
+  mutate(S = nrow(.) : 1) %>%
+  mutate(S_name = factor(S_name, levels = .$S_name)) %>%
+  left_join(rawdata, by = "S_name") %>%
+  select(S, S_name, face, color)
+
+num <- d %>%
+  mutate(n = 1) %>%
+  group_by(Scales) %>%
+  summarise(count = sum(n)) %>%
+  ungroup() %>%
+  arrange(desc(count)) %>%
+  mutate(order = 1:nrow(.))
+
+CA_plot <- full_join(num, d, by = "Scales") %>%
+  mutate(
+    Scales2 = order,
+    Scales = factor(Scales, levels = num$Scales),
+    S = factor(S, levels = symp$S, labels = symp$S_name)
+  ) %>%
+  select(S, Scales, Scales2, Type)
+
+scale <- read_excel(here::here("DATA", "Depression_Matrix_extra.xlsx"))
+
+# -----------------------
+# 绘图（左右镜像翻转）
+# -----------------------
+
+plot[[1]] <- CA_plot %>%
+  ggplot(aes(
+    x = S,
+    y = Scales2,
+    group = Scales,
+    color = Scales,
+    shape = Type
+  )) +
+  
+  # 背景网格
+  geom_hline(yintercept = 1:n_scales, color = "grey80", linewidth = 0.2) +
+  geom_vline(xintercept = 1:n_symptoms, color = "grey80", linewidth = 0.2) +
+
+  # 连线 + 点
+  geom_line(color = "grey60") +
+  geom_point(size = 3, fill = "white") +
+  scale_shape_manual(values = c(19, 21)) +
+
+  # =========== ⬇⬇⬇ 镜像翻转的关键行（仅这一行）⬇⬇⬇ ===========
+  scale_x_discrete(
+    limits = rev(levels(CA_plot$S)),   # ★ X 轴完全左右翻转（镜像）
+    drop = FALSE
+  ) +
+  # ===========================================================
+
+  scale_y_continuous(
+    limits = c(0, n_scales + 1),
+    expand = c(0, 0),
+    breaks = 1:n_scales,
+    labels = levels(CA_plot$Scales),
+    position = "left"
+  ) +
+
+  theme(
+    axis.text.x = element_text(
+      angle = 60, hjust = 1, vjust = 1,
+      color = case_when(
+        rev(symp$color) == 0 ~ "black",
+        rev(symp$color) == 1 ~ "#5a9ad7",
+        rev(symp$color) == 2 ~ "#ff0000"
+      )
+    ),
+    axis.text.y = element_text(
+      color = case_when(
+        scale$color == 0 ~ "black",
+        scale$color == 1 ~ "#5a9ad7",
+        scale$color == 2 ~ "#ff0000"
+      )
+    ),
+    panel.border = element_blank(),
+    axis.line = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    panel.background = element_blank(),
+    legend.position = "left",
+    plot.margin = unit(rep(.5, 4), "lines"),
+    text = element_text(family = "serif", size = 20)
+  ) +
+  guides(color = guide_legend(ncol = 1)) +
+  xlab("") +
+  ylab("")
+
+ggsave(
+  filename = here::here("FIGURE", "1_Content_Analysis_LEFT_RIGHT_FLIPPED.png"),
+  width = 32,
+  height = 18,
+  dpi = 300
+)
+
+rm(d, num, order_data, CA_plot, rawdata, symp, scale, n_scales, n_symptoms)
+
+```
+
+
+
+
 ```{r}
 #检验OUTPUT中的Jaccard_Index_ratio.csv和DATA中的Jaccard_Index_ratio.csv是否一致
 
@@ -381,32 +548,61 @@ base::colnames(df_ji) <- c(
 base::colnames(df_ji) <- rownames(df_ji)
 
 # 颜色分成4级：0–0.2, 0.2–0.4, 0.4–0.6, 0.6–0.8
-# 每段一个颜色
 my_colors <- c("#FFFAC1", "#FFE569", "#FFC633", "#FF8B0A")
-my_breaks <- c(0.0, 0.2, 0.4, 0.6, 0.8)  # 注意是5个断点 => 4段颜色
+my_breaks <- c(0.0, 0.2, 0.4, 0.6, 0.8)
 
 grDevices::pdf(
-  file = here::here("FIGURE", "2_Heatmap.pdf"),  # ✅ 改为 here()
-  width = 16, height = 12
+  file = here::here("FIGURE", "2_Heatmap.pdf"),
+  width = 16,
+  height = 12
 )
 
-corrplot::corrplot(
+# 先画热图，并保存 corrplot 返回结果
+corr_res <- corrplot::corrplot(
   df_ji,
   method = "circle",
-  addCoef.col = 'black',
+  addCoef.col = "black",
   diag = FALSE,
   addrect = 2,
   type = "upper",
   order = "original",
-  col = c("#FFFAC1", "#FFE569", "#FFC633", "#FF8B0A"),
+  col = my_colors,
   is.corr = FALSE,
   col.lim = c(0, 0.8),
   cl.lim = c(0, 0.8),
-  cl.breaks = c(0.0, 0.2, 0.4, 0.6, 0.8),  
-  cl.length = 5,                           
-  cl.cex = 1.0                             
-) %>%
-  corrRect(name = c("MSSMHS", "CDI", "SDS", "CCSMHS"))
+  cl.breaks = my_breaks,
+  cl.length = 5,
+  cl.cex = 1.0,
+
+  # 不显示右侧颜色图例
+  cl.pos = "n",
+
+  # 不让 corrplot 自动显示任何量表名称
+  tl.pos = "n",
+
+  # 给上方手动标签留空间
+  mar = c(0, 0, 7, 0)
+)
+
+# 画分组框
+corrplot::corrRect(
+  corrRes = corr_res,
+  name = c("MSSMHS", "CDI", "SDS", "CCSMHS")
+)
+
+# 手动只在上方添加量表名称
+n <- ncol(df_ji)
+
+text(
+  x = 2:n,
+  y = n + 0.8,
+  labels = colnames(df_ji)[-1],
+  srt = 90,
+  adj = c(0, 0.5),
+  xpd = NA,
+  col = "red",
+  cex = 0.9
+)
 
 dev.off()
 ```
@@ -478,7 +674,7 @@ p <- ggplot(df_hist, aes(x = Jaccard)) +
 # 3. Save Figure
 # ============================================================
 ggsave(
-  filename = here::here("FIGURE", "2_Heatmap_Distribution_APA.png"),
+  filename = here::here("FIGURE", "2_Heatmap_Distribution.png"),
   plot = p,
   width = 10,
   height = 7,
