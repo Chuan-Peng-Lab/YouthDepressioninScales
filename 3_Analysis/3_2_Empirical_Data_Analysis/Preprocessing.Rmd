@@ -1,0 +1,1824 @@
+---
+title: "Untitled"
+author: "why"
+date: "2025-11-15"
+output: html_document
+---
+
+
+
+
+```{r}
+# ============================================================
+# 去噪前预处理：病历整理、文本清理、病历选择及问卷匹配
+#
+# 精神检查处理：
+#   先识别为独立栏目，再提取正文。
+#   无论位于现病史之后还是其他栏目之后，均纳入分析文本。
+#   按原文顺序合并，栏目标题不进入正文。
+#
+# 输出中的“现病史”列：
+#   保存现病史与精神检查合并后的文本。
+#
+# 本阶段不执行问卷减1、反向计分和后续Python去噪。
+# ============================================================
+
+suppressPackageStartupMessages({
+  library(readxl)
+  library(dplyr)
+  library(stringr)
+  library(lubridate)
+  library(here)
+  library(openxlsx)
+})
+
+
+# ==================== 1. 参数与路径 ====================
+
+BASE_DIR <- here::here()
+DATA_DIR <- file.path(BASE_DIR, "DATA")
+OUTPUT_DIR <- file.path(BASE_DIR, "OUTPUT")
+RAW_OUTPUT_DIR <- file.path(BASE_DIR, "data")
+
+LOCAL_TZ <- "Asia/Shanghai"
+
+USE_STANDALONE_DATES <- FALSE
+
+MIN_AGE <- 7
+MAX_AGE_EXCLUSIVE <- 19
+
+PURE_DEP_LABELS <- c("抑郁状态", "抑郁障碍")
+
+
+# ==================== 2. 基础函数 ====================
+
+clean_id <- function(x) {
+  na_if(str_trim(as.character(x)), "")
+}
+
+clean_text <- function(x) {
+  x %>%
+    as.character() %>%
+    str_replace_all("[\r\n\t\u3000]", " ") %>%
+    str_squish() %>%
+    na_if("")
+}
+
+has_text <- function(x) {
+  !is.na(x) & str_squish(as.character(x)) != ""
+}
+
+keep_lines <- function(x) {
+  x <- as.character(x) %>%
+    str_replace_all("\r\n|\r", "\n") %>%
+    str_replace_all("\u3000", " ")
+
+  x[!has_text(x)] <- NA_character_
+  x
+}
+
+normalize_sex <- function(x) {
+  z <- str_to_lower(clean_text(x))
+
+  case_when(
+    z %in% c("男", "男性", "男孩", "男童", "m", "male") ~ "男",
+    z %in% c("女", "女性", "女孩", "女童", "f", "female") ~ "女",
+    TRUE ~ NA_character_
+  )
+}
+
+parse_age <- function(x) {
+  z <- clean_text(x)
+  values <- unique(z)
+
+  ages <- vapply(values, function(s) {
+    if (is.na(s)) return(NA_real_)
+
+    s <- str_remove_all(s, "[[:space:]]")
+
+    if (str_detect(s, "^\\d+(?:\\.\\d+)?$")) {
+      ans <- as.numeric(s)
+
+    } else if (
+      str_detect(
+        s,
+        paste0(
+          "^\\d+(?:\\.\\d+)?(?:周岁|岁)",
+          "(?:\\d+(?:个)?月)?",
+          "(?:\\d+(?:天|日))?$"
+        )
+      )
+    ) {
+      ans <- as.numeric(str_extract(s, "^\\d+(?:\\.\\d+)?"))
+
+    } else if (
+      str_detect(s, "^\\d+(?:\\.\\d+)?(?:个)?月$")
+    ) {
+      ans <- as.numeric(
+        str_extract(s, "^\\d+(?:\\.\\d+)?")
+      ) / 12
+
+    } else {
+      return(NA_real_)
+    }
+
+    if (!is.finite(ans) || ans < 0 || ans > 120) {
+      return(NA_real_)
+    }
+
+    floor(ans)
+  }, numeric(1), USE.NAMES = FALSE)
+
+  unname(ages[match(z, values)])
+}
+
+parse_local_time <- function(x, submit = FALSE) {
+  z <- clean_text(x) %>%
+    str_replace_all("年|月", "-") %>%
+    str_remove_all("日")
+
+  if (submit) {
+    z <- str_replace_all(z, "\\s+CST(?:\\s+|$)", " ")
+  }
+
+  serial <- !is.na(z) &
+    str_detect(z, "^\\d{5}(?:\\.\\d+)?$")
+
+  out <- as.POSIXct(
+    rep(NA_real_, length(z)),
+    origin = "1970-01-01",
+    tz = LOCAL_TZ
+  )
+
+  if (any(serial)) {
+    n <- as.numeric(z[serial])
+    d <- as.Date(floor(n), origin = "1899-12-30")
+
+    out[serial] <- as.POSIXct(
+      as.character(d),
+      tz = LOCAL_TZ
+    ) + round((n %% 1) * 86400)
+  }
+
+  idx <- which(!serial & !is.na(z))
+
+  if (length(idx)) {
+    out[idx] <- suppressWarnings(
+      parse_date_time(
+        z[idx],
+        orders = c("ymd HMS", "ymd HM", "ymd", "a b d HMS Y"),
+        tz = LOCAL_TZ,
+        locale = "C",
+        quiet = TRUE
+      )
+    )
+  }
+
+  out
+}
+
+parse_date <- function(x) {
+  as.Date(parse_local_time(x), tz = LOCAL_TZ)
+}
+
+parse_submit_time <- function(x) {
+  parse_local_time(x, submit = TRUE)
+}
+
+escape_regex <- function(s) {
+  chars <- strsplit(s, "", fixed = TRUE)[[1]]
+
+  special <- c(
+    "\\", ".", "^", "$", "|", "?", "*", "+",
+    "(", ")", "[", "]", "{", "}"
+  )
+
+  paste0(
+    ifelse(chars %in% special, paste0("\\", chars), chars),
+    collapse = ""
+  )
+}
+
+label_regex <- function(label) {
+  chars <- strsplit(label, "", fixed = TRUE)[[1]]
+
+  paste(
+    vapply(chars, escape_regex, character(1)),
+    collapse = "[ \\t]*"
+  )
+}
+
+labels_pattern <- function(labels) {
+  labels <- unique(labels)
+  labels <- labels[order(nchar(labels), decreasing = TRUE)]
+
+  paste(
+    vapply(labels, label_regex, character(1)),
+    collapse = "|"
+  )
+}
+
+
+# ==================== 3. 病历栏目识别 ====================
+
+mental_headers <- c(
+  "精神检查结果",
+  "精神状态检查",
+  "精神科检查",
+  "精神检查"
+)
+
+mental_pattern <- labels_pattern(mental_headers)
+
+mental_title_pattern <- regex(
+  paste0("(?:", mental_pattern, ")[ \\t]*[:：][ \\t]*")
+)
+
+mental_standalone_pattern <- regex(
+  paste0("(?m)^[ \\t]*(?:", mental_pattern, ")[ \\t]*$")
+)
+
+assessment_headers <- c(
+  "心理检查结果", "心理检查",
+  "心理测试结果", "心理测试",
+  "心理测验结果", "心理测验",
+  "心理测评结果", "心理测评",
+  "心理评估结果", "心理评估",
+  "测评结果", "评估结果",
+  "脑电生物点反馈", "脑电生物电反馈",
+  "沙盘结果", "沙盘总结", "沙盘",
+  "韦氏智力测评", "瑞文智力测评", "智力测评",
+  "症状自评量表", "症状自评",
+  "儿童行为量表", "注意力评估量表",
+  "注意力诊断量表", "困难量表", "压力测评"
+)
+
+assessment_pattern <- labels_pattern(assessment_headers)
+
+background_headers <- c(
+  "既往史", "过敏史", "流行病学史", "个人史", "家族史"
+)
+
+section_headers <- unique(c(
+  "陪诊人", "主诉", "现病史", "精神检查",
+  background_headers,
+  "体格检查", "专科查体", "专科检查", "辅助检查",
+  assessment_headers,
+  "诊断", "诊疗计划",
+  "表格<诊断>内容", "表格<处置>内容",
+  "医师签名", "就诊日期", "日期"
+))
+
+section_headers <- section_headers[
+  order(nchar(section_headers), decreasing = TRUE)
+]
+
+header_rules <- lapply(section_headers, function(header) {
+  h <- label_regex(header)
+
+  boundary <- if (header %in% background_headers) {
+    "([，,。；;])"
+  } else {
+    "([。；;])"
+  }
+
+  standalone_tail <- if (header %in% assessment_headers) {
+    paste0(
+      "[ \\t]*",
+      "(?:(?:显示|提示|表明|发现|为)[ \\t]*[:：]?)?",
+      "[ \\t]*$"
+    )
+  } else {
+    "[ \\t]*$"
+  }
+
+  list(
+    label = paste0(header, "："),
+
+    line = regex(
+      paste0("(?m)^[ \\t]*", h, "[ \\t]*[:：]")
+    ),
+
+    standalone = regex(
+      paste0("(?m)^[ \\t]*", h, standalone_tail)
+    ),
+
+    inline = if (
+      !header %in% c(assessment_headers, "日期", "就诊日期")
+    ) {
+      regex(
+        paste0(boundary, "[ \\t]*", h, "[ \\t]*[:：]")
+      )
+    } else {
+      NULL
+    }
+  )
+})
+
+section_pattern <- regex(
+  paste0(
+    "(?m)^(?:",
+    paste(
+      vapply(section_headers, escape_regex, character(1)),
+      collapse = "|"
+    ),
+    ")："
+  )
+)
+
+standardize_note <- function(x) {
+  x <- keep_lines(x)
+
+  # 修改：先保留精神检查的栏目边界，不再直接删掉标题。
+  x <- str_replace_all(
+    x, mental_title_pattern, "\n精神检查："
+  )
+
+  x <- str_replace_all(
+    x, mental_standalone_pattern, "\n精神检查："
+  )
+
+  for (rule in header_rules) {
+    x <- str_replace_all(x, rule$line, rule$label)
+    x <- str_replace_all(x, rule$standalone, rule$label)
+
+    if (!is.null(rule$inline)) {
+      x <- str_replace_all(
+        x,
+        rule$inline,
+        paste0("\\1\n", rule$label)
+      )
+    }
+  }
+
+  x
+}
+
+split_sections <- function(note_std) {
+  empty <- data.frame(
+    header = character(),
+    text = character(),
+    stringsAsFactors = FALSE
+  )
+
+  if (!has_text(note_std)) return(empty)
+
+  loc <- str_locate_all(note_std, section_pattern)[[1]]
+
+  if (!nrow(loc)) {
+    return(data.frame(header = "正文", text = note_std))
+  }
+
+  starts <- loc[, 2] + 1L
+  ends <- c(loc[-1, 1] - 1L, nchar(note_std))
+
+  body <- rep("", nrow(loc))
+  nonempty <- starts <= ends
+
+  body[nonempty] <- str_sub(
+    note_std,
+    starts[nonempty],
+    ends[nonempty]
+  )
+
+  result <- data.frame(
+    header = str_remove(
+      str_sub(note_std, loc[, 1], loc[, 2]),
+      "：$"
+    ),
+    text = body
+  )
+
+  if (loc[1, 1] > 1) {
+    result <- rbind(
+      data.frame(
+        header = "正文",
+        text = str_sub(note_std, 1, loc[1, 1] - 1)
+      ),
+      result
+    )
+  }
+
+  result
+}
+
+
+# ==================== 4. 新病历日期提取 ====================
+
+extract_note_date <- function(x) {
+  x <- keep_lines(x)
+
+  date_re <- paste0(
+    "\\d{4}[ \\t]*[-/.年][ \\t]*",
+    "\\d{1,2}[ \\t]*[-/.月][ \\t]*\\d{1,2}日?"
+  )
+
+  explicit_pattern <- paste0(
+    "(?m)^[ \\t]*(?:就[ \\t]*诊[ \\t]*)?",
+    "日[ \\t]*期[ \\t]*[:：][ \\t]*(",
+    date_re, ")"
+  )
+
+  values <- lapply(
+    str_match_all(x, regex(explicit_pattern)),
+    function(m) m[, 2]
+  )
+
+  if (USE_STANDALONE_DATES) {
+    missing <- which(lengths(values) == 0L)
+
+    values[missing] <- lapply(
+      str_match_all(
+        x[missing],
+        regex(
+          paste0("(?m)^[ \\t]*(", date_re, ")[ \\t]*$")
+        )
+      ),
+      function(m) m[, 2]
+    )
+  }
+
+  unique_values <- unique(unlist(values, use.names = FALSE))
+  parsed <- parse_date(str_remove_all(unique_values, "[ \\t]"))
+
+  days <- vapply(values, function(vals) {
+    dates <- parsed[match(vals, unique_values)]
+    good <- unique(dates[!is.na(dates)])
+
+    if (length(good) == 1L && !anyNA(dates)) {
+      as.numeric(good[1])
+    } else {
+      NA_real_
+    }
+  }, numeric(1))
+
+  as.Date(days, origin = "1970-01-01")
+}
+
+
+# ==================== 5. 行内心理测验清理 ====================
+
+assessment_lead_pattern <- paste0(
+  "(?:(?:当地|本院|外院)[ \\t]*|(?:在|于)?[ \\t]*",
+  "[\\p{Han}A-Za-z0-9]{2,20}",
+  "(?:医院|中心|门诊|诊所)[ \\t]*[:：]?[ \\t]*)?"
+)
+
+next_header_pattern <- labels_pattern(section_headers)
+
+inline_assessment_pattern <- regex(
+  paste0(
+    "(^|[，,。；;！？!?\\n])",
+
+    "([ \\t]*",
+      assessment_lead_pattern,
+      "(?:", assessment_pattern, ")",
+
+      "[ \\t]*(?:结果[ \\t]*)?",
+      "(?:[:：]|",
+      "(?:显示|提示|表明|发现|为)[ \\t]*[:：]?)",
+      "[ \\t]*",
+
+      "[^。；;！？!?\\n]*?",
+    ")",
+
+    "(?=",
+      "[，,]?[ \\t]*(?:", next_header_pattern, ")[ \\t]*[:：]",
+      "|[。；;！？!?\\n]",
+      "|$",
+    ")"
+  ),
+  ignore_case = TRUE
+)
+
+remove_inline_assessment <- function(x) {
+  if (!has_text(x)) return(NA_character_)
+
+  str_replace_all(
+    x,
+    inline_assessment_pattern,
+    "\\1"
+  )
+}
+
+
+# ==================== 6. 原有文本清理规则 ====================
+
+bad_tail <- paste0(
+  "多动冲动严重程度学习问题情绪问题品行自尊心",
+  "厌学病程饮食睡眠共患病治疗过程"
+)
+
+diagnosis_leak_pattern <- regex(
+  paste0(
+    "(?:诊断(?:为)?\\s*)?",
+    "(?:轻度|中度|重度|严重|非常严重)?\\s*",
+    "(?:抑郁状态|抑郁障碍|抑郁发作|",
+    "抑郁症(?!状)|焦虑抑郁症(?!状)|",
+    "焦虑抑郁(?=\\s*(?:$|[，,。；;：:、])))"
+  )
+)
+
+scale_core <- paste(
+  c(
+    "PHQ[-－]?9", "DASS[-－]?21",
+    "SCARED", "DSRSC", "SAS", "SDS", "CDI", "DASS", "PHQ",
+    "HAMD(?:[-－]?\\d+)?", "HAMA(?:[-－]?\\d+)?",
+    "SCL[-－]?90", "Conners", "CBCL", "SDQ",
+    "汉密尔顿(?:抑郁|焦虑)?(?:量表)?",
+    "症状自评(?:量表)?", "儿童行为量表",
+    "注意力评估量表", "注意力诊断量表",
+    "困难量表", "压力测评", "艾森克人格(?:问卷)?",
+    "韦氏(?:智力(?:测评|测试)?|测评|测试)",
+    "瑞文(?:智力(?:测评|测试)?|测评|测试)"
+  ),
+  collapse = "|"
+)
+
+scale_score_pattern <- regex(
+  paste0(
+    "(?:", scale_core, ")",
+    "\\s*[（(]?\\s*(?:总分|评分|得分|结果)?\\s*",
+    "(?:为|[:：=])?\\s*",
+    "\\d+(?:\\.\\d+)?(?![\\d.])",
+    "(?!\\s*(?:分钟|分后|分前|小时|天|周|月|年|岁|次))",
+    "\\s*分?\\s*[)）]?"
+  ),
+  ignore_case = TRUE
+)
+
+scale_name_pattern <- regex(
+  paste0("(?:", scale_core, ")"),
+  ignore_case = TRUE
+)
+
+bare_score_pattern <- regex(
+  paste0(
+    "(^|[，,。；;\\n])[ \\t]*",
+    "(?:焦虑|抑郁|强迫)(?:评分|得分|总分)?",
+    "[ \\t]*[:：=]?[ \\t]*",
+    "\\d+(?:\\.\\d+)?[ \\t]*分[ \\t]*",
+    "(?=$|[，,。；;\\n])"
+  )
+)
+
+clean_model_text <- function(x) {
+  x <- str_replace_all(x, fixed(bad_tail), "")
+  x <- str_replace_all(x, diagnosis_leak_pattern, "")
+  x <- str_replace_all(x, scale_score_pattern, "")
+  x <- str_replace_all(x, scale_name_pattern, "")
+  x <- str_replace_all(x, bare_score_pattern, "\\1")
+
+  x %>%
+    str_replace_all("[，,；;：:、]{2,}", "；") %>%
+    str_replace_all("。{2,}", "。") %>%
+    str_replace_all("([。！？])\\s*[，,；;]", "\\1") %>%
+    str_replace_all("\\s+([，,。；;：:、])", "\\1") %>%
+    str_replace_all(
+      "^[\\s，,。；;：:、]+|[\\s，,。；;：:、]+$",
+      ""
+    ) %>%
+    clean_text()
+}
+
+
+# ==================== 7. 提取现病史及精神检查 ====================
+
+extract_history <- function(x, old = FALSE, standardized = FALSE) {
+  if (!standardized) {
+    x <- keep_lines(x)
+
+    if (old && has_text(x)) {
+      x <- str_remove(
+        x,
+        regex(
+          "^[ \\t]*现[ \\t]*病[ \\t]*史[ \\t]*[:：][ \\t]*"
+        )
+      )
+
+      x <- paste0("现病史：\n", x)
+    }
+
+    x <- standardize_note(x)
+  }
+
+  parts <- split_sections(x)
+  chosen <- rep(FALSE, nrow(parts))
+  has_header <- any(parts$header == "现病史")
+
+  if (has_header) {
+    chosen <- parts$header == "现病史"
+    source <- if (old) "structured_old" else "structured_new"
+
+  } else {
+    # 保留原有回退：
+    # 无现病史标题时，使用首个其他栏目之前的正文／主诉。
+    allowed <- parts$header %in% c("正文", "陪诊人", "主诉")
+    stop_at <- which(!allowed)
+
+    upto <- if (length(stop_at)) {
+      stop_at[1] - 1L
+    } else {
+      nrow(parts)
+    }
+
+    if (upto > 0) {
+      chosen[seq_len(upto)] <-
+        parts$header[seq_len(upto)] %in% c("正文", "主诉")
+    }
+
+    source <- "unstructured_fallback"
+  }
+
+  # 修改：精神检查不受其所在位置限制，统一加入提取范围。
+  # 使用同一个逻辑索引，保证每个段落只取一次、顺序与原文一致。
+  chosen <- chosen | parts$header == "精神检查"
+
+  history <- paste(parts$text[chosen], collapse = "\n")
+
+  history <- str_remove(
+    history,
+    "^[ \\t\\n]*[:：]+[ \\t\\n]*"
+  )
+
+  removed <- if (has_text(history)) {
+    str_match_all(
+      history,
+      inline_assessment_pattern
+    )[[1]][, 3]
+  } else {
+    character()
+  }
+
+  cleaned_history <- remove_inline_assessment(history)
+
+  list(
+    history = cleaned_history,
+    history_before_inline = history,
+    assessment_removed = paste(removed, collapse = "\n"),
+
+    chief = clean_text(
+      paste(parts$text[parts$header == "主诉"], collapse = "\n")
+    ),
+
+    companion = clean_text(
+      paste(parts$text[parts$header == "陪诊人"], collapse = "\n")
+    ),
+
+    source = if (has_text(cleaned_history)) source else "missing"
+  )
+}
+
+
+# ==================== 8. 是否明确本次未到诊 ====================
+
+is_current_absence <- function(x) {
+  if (!has_text(x)) return(FALSE)
+
+  clauses <- str_split(
+    x,
+    "[，,。；;！？!?\\n]+"
+  )[[1]] %>%
+    str_squish()
+
+  historical <- str_detect(
+    clauses,
+    "上次|上回|前次|既往|曾经|此前|之前|昨日|昨天|去年|上周|上月"
+  )
+
+  current <- str_detect(
+    clauses,
+    "本次|此次|今日|今天|现今"
+  )
+
+  evaluable <- clauses[!historical | current]
+
+  absence <- str_detect(
+    evaluable,
+    paste0(
+      "(?:患儿|孩子|患者|本人)(?:今日|本次)?",
+      "(?:未|没有|未能)(?:到诊|来诊|到场|在场)|",
+      "未见(?:到)?患儿[ \\t]*$|",
+      "^(?:本次|此次|今日|今天)?[ \\t]*(?:由)?",
+      "(?:家属|父亲|母亲|父母|爸爸|妈妈)?",
+      "(?:来院)?代诊[ \\t]*$"
+    )
+  )
+
+  present <- str_detect(
+    evaluable,
+    paste0(
+      "(?:患儿|孩子|患者)(?:本人)?(?:今日|本次)?",
+      "(?:已|也|一同|亲自)?(?:到诊|来诊|在场)|",
+      "本人(?:到诊|来诊|在场)"
+    )
+  )
+
+  any(absence) && !any(present)
+}
+
+
+# ==================== 9. 诊断标准化及分组 ====================
+
+clean_diagnosis <- function(x) {
+  x <- as.character(x)
+  values <- unique(x)
+
+  cleaned <- vapply(values, function(s) {
+    if (!has_text(s)) return(NA_character_)
+
+    s <- str_replace_all(s, "[\r\n；]+", ";")
+    s <- str_replace_all(s, "[ \\t]+(?=\\d+[.、．）)])", ";")
+
+    s <- str_replace_all(
+      s,
+      "([\\p{Han}])[ \\t]*(?=\\d+[.、．）)])",
+      "\\1;"
+    )
+
+    pieces <- str_split(s, ";")[[1]] %>%
+      str_squish()
+
+    pieces <- str_remove(
+      pieces,
+      "^[（(]?[0-9０-９]+[.、．）)][ \\t]*"
+    )
+
+    pieces <- str_trim(pieces)
+    pieces <- unique(pieces[nzchar(pieces)])
+
+    if (length(pieces)) {
+      paste(pieces, collapse = ";")
+    } else {
+      NA_character_
+    }
+  }, character(1), USE.NAMES = FALSE)
+
+  unname(cleaned[match(x, values)])
+}
+
+classify_diagnosis <- function(x) {
+  case_when(
+    !has_text(x) ~ "诊断缺失",
+    x %in% PURE_DEP_LABELS ~ "单纯抑郁",
+    str_detect(x, "抑郁") ~ "含抑郁但非单纯抑郁",
+    TRUE ~ "非抑郁"
+  )
+}
+
+
+# ==================== 10. 读取Excel ====================
+
+read_input <- function(path, id_column, required_columns) {
+  hdr <- read_excel(path, n_max = 1, .name_repair = "unique")
+  nm <- str_squish(names(hdr))
+
+  absent <- setdiff(required_columns, nm)
+
+  if (length(absent)) {
+    stop(
+      basename(path),
+      " 缺少列：",
+      paste(absent, collapse = "、")
+    )
+  }
+
+  types <- rep("guess", length(nm))
+  types[nm == id_column] <- "text"
+
+  ans <- read_excel(
+    path,
+    col_types = types,
+    .name_repair = "unique"
+  )
+
+  names(ans) <- nm
+  ans
+}
+
+
+# ==================== 11. 整理全部就诊记录 ====================
+
+prepare_visits <- function(old, new) {
+  make_rows <- function(dat, is_old) {
+    if (!nrow(dat)) return(tibble())
+
+    inputs <- as.character(
+      if (is_old) dat$现病史 else dat$病历信息
+    )
+
+    unique_inputs <- unique(inputs)
+    notes <- keep_lines(unique_inputs)
+
+    if (is_old) {
+      notes <- ifelse(
+        has_text(notes),
+        paste0(
+          "现病史：\n",
+          str_remove(
+            notes,
+            regex(
+              "^[ \\t]*现[ \\t]*病[ \\t]*史[ \\t]*[:：][ \\t]*"
+            )
+          )
+        ),
+        NA_character_
+      )
+    }
+
+    notes <- standardize_note(notes)
+
+    histories <- lapply(
+      notes,
+      extract_history,
+      old = is_old,
+      standardized = TRUE
+    )
+
+    histories <- histories[match(inputs, unique_inputs)]
+
+    get_field <- function(field) {
+      vapply(histories, function(h) h[[field]], character(1))
+    }
+
+    if (is_old) {
+      visit_date <- parse_date(dat$就诊日期)
+      birth <- parse_date(dat$出生日期)
+
+      valid <- !is.na(visit_date) &
+        !is.na(birth) &
+        visit_date >= birth
+
+      age <- rep(NA_real_, nrow(dat))
+
+      age[valid] <-
+        year(visit_date[valid]) -
+        year(birth[valid]) -
+        as.integer(
+          format(visit_date[valid], "%m%d") <
+            format(birth[valid], "%m%d")
+        )
+
+      age[!is.na(age) & (age < 0 | age > 120)] <- NA_real_
+
+      chief <- clean_text(dat$主诉)
+      sex <- rep(NA_character_, nrow(dat))
+      id <- clean_id(dat$门诊ID)
+
+    } else {
+      visit_date <- extract_note_date(inputs)
+      age <- parse_age(dat$年龄)
+      chief <- get_field("chief")
+      sex <- normalize_sex(dat$性别)
+      id <- clean_id(dat$门诊号)
+    }
+
+    history <- clean_model_text(get_field("history"))
+    before <- get_field("history_before_inline")
+
+    attend_text <- paste(
+      coalesce(chief, ""),
+      coalesce(get_field("companion"), ""),
+      coalesce(before, ""),
+      sep = "\n"
+    )
+
+    tibble(
+      门诊ID = id,
+      source_type = if (is_old) {
+        "old_complains"
+      } else {
+        "new_psychosomatic"
+      },
+
+      就诊日期 = visit_date,
+      年龄_病历 = age,
+      性别 = sex,
+      主诉 = clean_model_text(chief),
+      现病史 = history,
+      诊断 = clean_text(dat$诊断),
+      诊断_clean = clean_diagnosis(dat$诊断),
+
+      history_source = ifelse(
+        has_text(history),
+        get_field("source"),
+        "missing"
+      ),
+
+      current_absence = vapply(
+        attend_text,
+        is_current_absence,
+        logical(1)
+      ),
+
+      行内清理前病史 = before,
+      行内检查删除 = get_field("assessment_removed")
+    )
+  }
+
+  bind_rows(
+    make_rows(old, TRUE),
+    make_rows(new, FALSE)
+  ) %>%
+    mutate(
+      cmp_row_id = row_number(),
+
+      info_score =
+        1000L * has_text(现病史) +
+        500L * has_text(诊断_clean) +
+        200L * has_text(主诉) +
+        50L * !is.na(年龄_病历) +
+        20L * !is.na(性别),
+
+      history_chars = nchar(coalesce(现病史, ""))
+    )
+}
+
+
+# ==================== 12. 每次就诊匹配最近问卷 ====================
+
+build_visit_candidates <- function(cmp, raw) {
+  raw_candidates <- raw %>%
+    group_by(ID, submit_date) %>%
+    arrange(submit_time, raw_row_id, .by_group = TRUE) %>%
+    slice(1) %>%
+    ungroup() %>%
+    transmute(
+      门诊ID = ID,
+      raw_row_id,
+      submit_time,
+      submit_date,
+      年龄_问卷 = parse_age(Age),
+      性别_问卷 = normalize_sex(Gender)
+    )
+
+  cmp_index <- cmp %>%
+    transmute(
+      门诊ID,
+      cmp_row_id,
+      就诊日期,
+      年龄_病历,
+      性别,
+      info_score,
+      history_chars,
+      pass_history = has_text(现病史),
+      pass_diagnosis = has_text(诊断_clean),
+      pass_attendance = !current_absence
+    )
+
+  as_tibble(
+    merge(
+      cmp_index,
+      raw_candidates,
+      by = "门诊ID",
+      all = FALSE,
+      sort = FALSE
+    )
+  ) %>%
+    mutate(
+      time_diff = abs(as.numeric(就诊日期 - submit_date)),
+      time_diff_sort = ifelse(is.na(time_diff), Inf, time_diff)
+    ) %>%
+    group_by(cmp_row_id) %>%
+    arrange(
+      time_diff_sort,
+      submit_time,
+      raw_row_id,
+      .by_group = TRUE
+    ) %>%
+    slice(1) %>%
+    ungroup() %>%
+    mutate(
+      Age = coalesce(年龄_病历, 年龄_问卷),
+
+      Age_source = case_when(
+        !is.na(年龄_病历) ~ "Medical record",
+        !is.na(年龄_问卷) ~ "Questionnaire",
+        TRUE ~ "Missing"
+      ),
+
+      性别 = coalesce(性别, 性别_问卷),
+
+      pass_age =
+        !is.na(Age) &
+        Age >= MIN_AGE &
+        Age < MAX_AGE_EXCLUSIVE,
+
+      eligible =
+        pass_history &
+        pass_age &
+        pass_attendance &
+        pass_diagnosis
+    ) %>%
+    select(-time_diff_sort)
+}
+
+
+# ==================== 13. 每人选择最早合格病历 ====================
+
+choose_earliest_visit <- function(candidates) {
+  candidates %>%
+    filter(eligible) %>%
+    group_by(门诊ID) %>%
+    arrange(
+      is.na(就诊日期),
+      就诊日期,
+      desc(history_chars),
+      desc(info_score),
+      cmp_row_id,
+      .by_group = TRUE
+    ) %>%
+    slice(1) %>%
+    ungroup() %>%
+    mutate(
+      selection_status = if_else(
+        is.na(就诊日期),
+        "日期缺失_按病史长度优先选择",
+        "最早合格的有日期病历"
+      ),
+
+      match_status = if_else(
+        is.na(time_diff),
+        "ID_only_date_unavailable",
+        "nearest_date"
+      )
+    )
+}
+
+
+# ==================== 14. 主流程 ====================
+
+run_preprocessing <- function() {
+  dir.create(
+    OUTPUT_DIR,
+    recursive = TRUE,
+    showWarnings = FALSE
+  )
+
+  dir.create(
+    RAW_OUTPUT_DIR,
+    recursive = TRUE,
+    showWarnings = FALSE
+  )
+
+  message("1/4 读取Excel")
+
+  old <- read_input(
+    file.path(DATA_DIR, "Complains_YoungClients.xls"),
+    "门诊ID",
+    c(
+      "门诊ID", "就诊日期", "出生日期",
+      "主诉", "现病史", "诊断"
+    )
+  )
+
+  new <- read_input(
+    file.path(DATA_DIR, "心身医学科精神科.xls"),
+    "门诊号",
+    c("门诊号", "性别", "年龄", "诊断", "病历信息")
+  )
+
+  raw <- read_input(
+    file.path(DATA_DIR, "Rawdata1.xlsx"),
+    "ID",
+    c("ID", "提交时间", "Age", "Gender")
+  )
+
+  raw_original_cols <- names(raw)
+
+  raw <- raw %>%
+    mutate(
+      ID = clean_id(ID),
+      raw_row_id = row_number(),
+      submit_time = parse_submit_time(提交时间),
+      submit_date = as.Date(submit_time, tz = LOCAL_TZ)
+    ) %>%
+    filter(!is.na(ID))
+
+  message("2/4 提取并清洗全部病史")
+
+  cmp <- prepare_visits(old, new) %>%
+    filter(!is.na(门诊ID))
+
+  if (!all(cmp$门诊ID %in% raw$ID)) {
+    stop("问卷ID未覆盖全部病历ID，请核对输入文件。")
+  }
+
+  message("3/4 选择最早合格病历及最近问卷")
+
+  candidates <- build_visit_candidates(cmp, raw)
+  selected <- choose_earliest_visit(candidates)
+
+  other_raw <- raw %>%
+    filter(!ID %in% selected$门诊ID) %>%
+    group_by(ID) %>%
+    arrange(submit_time, raw_row_id, .by_group = TRUE) %>%
+    slice(1) %>%
+    ungroup()
+
+  chosen_raw_ids <- c(
+    selected$raw_row_id,
+    other_raw$raw_row_id
+  )
+
+  Raw_output <- raw[
+    match(chosen_raw_ids, raw$raw_row_id),
+    raw_original_cols,
+    drop = FALSE
+  ]
+
+  Cmp_output <- selected %>%
+    left_join(
+      cmp %>%
+        select(
+          cmp_row_id, 主诉, 现病史, 诊断,
+          source_type, history_source, 诊断_clean
+        ),
+      by = "cmp_row_id"
+    ) %>%
+    mutate(
+      diagnosis_group = classify_diagnosis(诊断_clean)
+    ) %>%
+    select(
+      门诊ID, 就诊日期, 年龄_病历, 性别,
+      主诉, 现病史, 诊断,
+      source_type, history_source,
+      Age, Age_source,
+      诊断_clean, diagnosis_group,
+      submit_date, time_diff, match_status,
+      selection_status, history_chars, cmp_row_id
+    )
+
+  # 保留原来的行内检查清理表。
+  assessment_audit <- selected %>%
+    select(cmp_row_id, 门诊ID, 就诊日期) %>%
+    left_join(
+      cmp %>%
+        select(
+          cmp_row_id,
+          source_type,
+          行内清理前病史,
+          行内检查删除,
+          现病史
+        ),
+      by = "cmp_row_id"
+    ) %>%
+    filter(has_text(行内检查删除)) %>%
+    transmute(
+      门诊ID,
+      就诊日期,
+      source_type,
+      cmp_row_id,
+      清理前病史 = 行内清理前病史,
+      删除内容 = 行内检查删除,
+      清理后现病史 = 现病史
+    )
+
+  stages <- list(
+    candidates,
+    filter(candidates, pass_history),
+    filter(candidates, pass_history, pass_age),
+    filter(candidates, pass_history, pass_age, pass_attendance),
+    filter(candidates, eligible)
+  )
+
+  cleaning_summary <- data.frame(
+    step = c(
+      "有效ID的就诊记录",
+      "清洗后病史非空",
+      "年龄7-18岁",
+      "排除明确本次未到诊",
+      "诊断非空"
+    ),
+
+    n_visits = vapply(
+      stages,
+      function(z) n_distinct(z$cmp_row_id),
+      integer(1)
+    ),
+
+    n_patients = vapply(
+      stages,
+      function(z) n_distinct(z$门诊ID),
+      integer(1)
+    )
+  )
+
+  cleaning_summary <- bind_rows(
+    cleaning_summary,
+    data.frame(
+      step = "每位患者选取一份病历",
+      n_visits = nrow(Cmp_output),
+      n_patients = nrow(Cmp_output)
+    )
+  )
+
+  diagnosis_full <- Cmp_output %>%
+    count(诊断_clean, diagnosis_group, name = "n") %>%
+    arrange(desc(n), 诊断_clean)
+
+  is_dep <- str_detect(Cmp_output$诊断_clean, "抑郁")
+  is_pure <- Cmp_output$诊断_clean %in% PURE_DEP_LABELS
+
+  diagnosis_key <- data.frame(
+    item = c(
+      "去噪前每人一份病历",
+      "仅诊断为抑郁状态",
+      "仅诊断为抑郁障碍",
+      "单纯抑郁合计",
+      "含抑郁但非单纯抑郁",
+      "不含抑郁字样"
+    ),
+
+    n = c(
+      nrow(Cmp_output),
+      sum(Cmp_output$诊断_clean == "抑郁状态"),
+      sum(Cmp_output$诊断_clean == "抑郁障碍"),
+      sum(is_pure),
+      sum(is_dep & !is_pure),
+      sum(!is_dep)
+    )
+  )
+
+  selection_summary <- Cmp_output %>%
+    count(selection_status, match_status, name = "n")
+
+  message("4/4 保存去噪前中间数据")
+
+  result <- list(
+    Raw_output = Raw_output,
+    Cmp_output = Cmp_output,
+    Summary = cleaning_summary
+  )
+
+  saveRDS(
+    result,
+    file.path(OUTPUT_DIR, "Pre_denoising_state.rds")
+  )
+
+  write.xlsx(
+    list(
+      Summary = cleaning_summary,
+      Diagnosis_key = diagnosis_key,
+      Diagnosis_full = diagnosis_full,
+      Selection_summary = selection_summary,
+      Clean_data = Cmp_output,
+      行内检查清理 = assessment_audit
+    ),
+    file.path(
+      OUTPUT_DIR,
+      "Complains_clean_step1_to_step4.xlsx"
+    ),
+    overwrite = TRUE
+  )
+
+  # 直接导出本轮Raw_output，沿用原来的输出位置。
+  write.xlsx(
+    Raw_output,
+    file = file.path(RAW_OUTPUT_DIR, "Raw_output.xlsx"),
+    rowNames = FALSE,
+    overwrite = TRUE
+  )
+
+  print(cleaning_summary)
+
+  cat("\n病历选择及问卷匹配情况：\n")
+  print(selection_summary)
+
+  cat("\n诊断分组情况：\n")
+  print(diagnosis_key)
+
+  cat(
+    "\n去噪前预处理完成。",
+    "\n病历：", nrow(Cmp_output),
+    "\n问卷：", nrow(Raw_output),
+    "\n病历日期缺失：", sum(is.na(Cmp_output$就诊日期)),
+    "\n年龄使用问卷补缺：",
+    sum(Cmp_output$Age_source == "Questionnaire"),
+    "\n存在行内检查删除的选中病历：",
+    nrow(assessment_audit),
+    "\n"
+  )
+
+  invisible(result)
+}
+
+
+# ==================== 15. 执行 ====================
+
+preprocessing_result <- run_preprocessing()
+
+Raw_output <- preprocessing_result$Raw_output
+
+
+
+
+
+```
+
+
+
+
+```{r}
+# ============================================================
+# 去噪后：输出研究数据、全部样本ML数据及人口学统计
+#
+# DATA：
+#   Complains_denoised.xlsx
+#   Pre_denoising_state.rds
+#
+# 分组规则：
+#   单纯抑郁：诊断完整字符串为“抑郁状态”或“抑郁障碍”
+#   非抑郁：诊断中不含任何“抑郁”字样
+#   其余记录不进入本次ML
+#
+# 全部中间对象在本次运行中生成。
+# 使用全部符合条件的样本，只随机分配5折。
+# ============================================================
+
+library(dplyr)
+library(stringr)
+library(readxl)
+library(openxlsx)
+library(here)
+
+
+run_export <- function(base_dir = here::here(), seed = 20240211) {
+
+  # ==================== 1. 路径及读取 ====================
+
+  DATA_DIR <- file.path(base_dir, "DATA")
+  OUTPUT_DIR <- file.path(base_dir, "OUTPUT")
+
+  dir.create(
+    OUTPUT_DIR,
+    recursive = TRUE,
+    showWarnings = FALSE
+  )
+
+  state_file <- file.path(
+    DATA_DIR, "Pre_denoising_state.rds"
+  )
+
+  denoised_file <- file.path(
+    DATA_DIR, "Complains_denoised.xlsx"
+  )
+
+  state <- readRDS(state_file)
+
+  Raw_output <- state$Raw_output %>%
+    mutate(ID = str_trim(as.character(ID))) %>%
+    arrange(ID, .locale = "C")
+
+  original_cmp <- state$Cmp_output %>%
+    mutate(门诊ID = str_trim(as.character(门诊ID))) %>%
+    arrange(门诊ID, .locale = "C")
+
+  # 仅回接去噪文本及删除数量。
+  # 年龄、日期等其他字段沿用RDS中的原始类型。
+  denoised <- read_excel(
+    denoised_file,
+    sheet = "Clean_data",
+    col_types = "text"
+  ) %>%
+    transmute(
+      门诊ID = str_trim(门诊ID),
+      history_before = coalesce(现病史_去噪前, ""),
+      history_after = coalesce(现病史, ""),
+      删除片段数 = as.integer(删除片段数)
+    )
+
+  # 保证一人一份记录，且两份输入来自同一批患者。
+  stopifnot(
+    !anyNA(Raw_output$ID),
+    !anyNA(original_cmp$门诊ID),
+    !anyNA(denoised$门诊ID),
+    !anyDuplicated(Raw_output$ID),
+    !anyDuplicated(original_cmp$门诊ID),
+    !anyDuplicated(denoised$门诊ID),
+    setequal(original_cmp$门诊ID, denoised$门诊ID),
+    all(original_cmp$门诊ID %in% Raw_output$ID)
+  )
+
+  Cmp_step4 <- original_cmp %>%
+    left_join(denoised, by = "门诊ID")
+
+  # 确认Python处理的是对应的R预处理文本。
+  stopifnot(
+    all(
+      coalesce(Cmp_step4$现病史, "") ==
+        Cmp_step4$history_before
+    )
+  )
+
+  n_before <- nrow(Cmp_step4)
+
+  Cmp_step4 <- Cmp_step4 %>%
+    mutate(
+      现病史_去噪前 = history_before,
+      现病史 = history_after
+    ) %>%
+    select(-history_before, -history_after) %>%
+    filter(str_squish(现病史) != "")
+
+  cat(
+    "去噪前病历：", n_before,
+    "\n排除空病史：", n_before - nrow(Cmp_step4),
+    "\n去噪后有效病历：", nrow(Cmp_step4), "\n"
+  )
+
+
+  # ==================== 2. 定义诊断组 ====================
+
+  pure_dep_labels <- c("抑郁状态", "抑郁障碍")
+
+  Cmp_depression_pure <- Cmp_step4 %>%
+    filter(诊断_clean %in% pure_dep_labels) %>%
+    mutate(diagnosis_group = "单纯抑郁")
+
+  Cmp_non_depression <- Cmp_step4 %>%
+    filter(!str_detect(诊断_clean, "抑郁")) %>%
+    mutate(diagnosis_group = "非抑郁")
+
+  Cmp_depression_comorbid <- Cmp_step4 %>%
+    filter(
+      str_detect(诊断_clean, "抑郁"),
+      !诊断_clean %in% pure_dep_labels
+    ) %>%
+    mutate(
+      diagnosis_group = "含抑郁但非单纯抑郁"
+    )
+  
+  # ==================== 3. 重新生成诊断标签及问卷 ====================
+
+  # 每次根据本次分组重新生成，不使用环境中的旧Dep_label。
+  Dep_label <- bind_rows(
+    Cmp_depression_pure %>%
+      transmute(
+        ID = 门诊ID,
+        Depression_status = "Depression"
+      ),
+
+    Cmp_non_depression %>%
+      transmute(
+        ID = 门诊ID,
+        Depression_status = "Non-depression"
+      )
+  ) %>%
+    arrange(ID, .locale = "C")
+
+  Questionnaire_With_Diagnosis_Label <- Raw_output %>%
+    inner_join(Dep_label, by = "ID")
+
+  Questionnaire_Depression_Pure <-
+    Questionnaire_With_Diagnosis_Label %>%
+    filter(Depression_status == "Depression")
+
+
+  # ==================== 4. 问卷计分 ====================
+
+  # 原始条目减1；指定条目反向计分。
+  # CDI不包含第26题。
+  # total_DASS为7个抑郁条目的原始分之和，不乘2。
+
+  dsrsc_items <- paste0("DSRSC", 1:18)
+  phq_items <- paste0("PHQ", 1:9)
+
+  dass_dep_items <- c(
+    "DASS3", "DASS5", "DASS10",
+    "DASS13", "DASS16", "DASS17", "DASS21"
+  )
+
+  cdi_items <- setdiff(
+    paste0("CDI", 1:27), "CDI26"
+  )
+
+  CDI_reverse_items <- c(
+    "CDI2", "CDI5", "CDI7", "CDI8", "CDI10",
+    "CDI11", "CDI13", "CDI15", "CDI16",
+    "CDI18", "CDI21", "CDI24", "CDI25"
+  )
+
+  DSRSC_reverse_items <- c(
+    "DSRSC3", "DSRSC5", "DSRSC6", "DSRSC10",
+    "DSRSC14", "DSRSC15", "DSRSC17", "DSRSC18"
+  )
+
+  score_items <- c(
+    dsrsc_items,
+    phq_items,
+    dass_dep_items,
+    cdi_items
+  )
+
+  qdat_all <- Questionnaire_With_Diagnosis_Label %>%
+    mutate(across(all_of(score_items), as.numeric))
+
+  # 原始问卷应无缺失；避免异常值转换成NA后被忽略计分。
+  if (anyNA(qdat_all[score_items])) {
+    stop("计分条目存在缺失或无法转换为数值的内容，请核对原始问卷。")
+  }
+
+  qdat_all <- qdat_all %>%
+    mutate(
+      across(all_of(score_items), ~ .x - 1),
+      across(all_of(CDI_reverse_items), ~ 2 - .x),
+      across(all_of(DSRSC_reverse_items), ~ 2 - .x)
+    ) %>%
+    mutate(
+      total_DSRSC = rowSums(
+        pick(all_of(dsrsc_items)), na.rm = TRUE
+      ),
+      total_PHQ = rowSums(
+        pick(all_of(phq_items)), na.rm = TRUE
+      ),
+      total_CDI = rowSums(
+        pick(all_of(cdi_items)), na.rm = TRUE
+      ),
+      total_DASS = rowSums(
+        pick(all_of(dass_dep_items)), na.rm = TRUE
+      )
+    ) %>%
+    select(
+      ID, total_DSRSC, total_PHQ, total_CDI, total_DASS
+    )
+
+
+  # ==================== 5. 构建全部样本ML数据 ====================
+
+  ml_data <- bind_rows(
+    Cmp_depression_pure %>%
+      transmute(
+        ID = 门诊ID,
+        history_text = 现病史,
+        label = 1L
+      ),
+
+    Cmp_non_depression %>%
+      transmute(
+        ID = 门诊ID,
+        history_text = 现病史,
+        label = 0L
+      )
+  ) %>%
+    inner_join(qdat_all, by = "ID") %>%
+    arrange(ID, .locale = "C")
+
+  # 确认连接问卷后没有漏掉或重复任何入组患者。
+  stopifnot(
+    !anyDuplicated(ml_data$ID),
+    nrow(ml_data) == nrow(Dep_label),
+    setequal(ml_data$ID, Dep_label$ID)
+  )
+
+
+  # ==================== 6. 分层分配5折 ====================
+
+  # 固定输入顺序、随机种子及抽样算法。
+  set.seed(
+    seed,
+    kind = "Mersenne-Twister",
+    normal.kind = "Inversion",
+    sample.kind = "Rejection"
+  )
+
+  ml_data <- ml_data %>%
+    group_by(label) %>%
+    mutate(
+      fold = sample(rep(1:5, length.out = n()))
+    ) %>%
+    ungroup() %>%
+    arrange(fold, desc(label), ID, .locale = "C")
+
+
+  # ==================== 7. 人口学信息 ====================
+
+  # 年龄、性别沿用前期预处理结果：病历优先、问卷补缺。
+
+  demo_lookup <- Cmp_step4 %>%
+    transmute(
+      ID = 门诊ID,
+      Age = as.numeric(Age),
+      sex = as.character(性别)
+    )
+
+  cleaned_demo <- demo_lookup %>%
+    mutate(sample_group = "Cleaned medical records")
+
+  pure_dep_demo <- Cmp_depression_pure %>%
+    transmute(
+      ID = 门诊ID,
+      Age,
+      sex = 性别,
+      sample_group = "Pure depression medical records"
+    )
+
+  non_dep_demo <- Cmp_non_depression %>%
+    transmute(
+      ID = 门诊ID,
+      Age,
+      sex = 性别,
+      sample_group = "Non-depression medical records"
+    )
+
+  questionnaire_demo <-
+    Questionnaire_With_Diagnosis_Label %>%
+    transmute(
+      ID,
+      diagnosis_group = Depression_status,
+      sample_group = "Questionnaire with diagnosis label"
+    ) %>%
+    left_join(demo_lookup, by = "ID")
+
+  questionnaire_pure_demo <-
+    Questionnaire_Depression_Pure %>%
+    transmute(
+      ID,
+      sample_group = "Pure depression questionnaire"
+    ) %>%
+    left_join(demo_lookup, by = "ID")
+
+  ml_demo <- ml_data %>%
+    transmute(
+      ID,
+      diagnosis_group = if_else(
+        label == 1L, "Depression", "Non-depression"
+      ),
+      sample_group = "Full ML dataset"
+    ) %>%
+    left_join(demo_lookup, by = "ID")
+
+
+  # ==================== 8. 人口学统计 ====================
+
+  demo_summary <- function(dat, ...) {
+    dat %>%
+      group_by(...) %>%
+      summarise(
+        n = n(),
+
+        age_mean = mean(Age, na.rm = TRUE),
+        age_sd = sd(Age, na.rm = TRUE),
+        age_median = median(Age, na.rm = TRUE),
+        age_q1 = quantile(Age, 0.25, na.rm = TRUE),
+        age_q3 = quantile(Age, 0.75, na.rm = TRUE),
+
+        male_n = sum(sex == "男", na.rm = TRUE),
+        male_percent = male_n / n,
+
+        female_n = sum(sex == "女", na.rm = TRUE),
+        female_percent = female_n / n,
+
+        sex_missing_n = sum(is.na(sex) | sex == ""),
+
+        .groups = "drop"
+      )
+  }
+
+  summary_samples <- bind_rows(
+    cleaned_demo,
+    pure_dep_demo,
+    non_dep_demo,
+    questionnaire_demo %>%
+      select(ID, Age, sex, sample_group),
+    questionnaire_pure_demo,
+    ml_demo %>%
+      select(ID, Age, sex, sample_group)
+  ) %>%
+    demo_summary(sample_group)
+
+  summary_questionnaire_by_label <- questionnaire_demo %>%
+    demo_summary(diagnosis_group)
+
+  summary_ml_by_label <- ml_demo %>%
+    demo_summary(diagnosis_group)
+  
+  comorbid_demo <- Cmp_depression_comorbid %>%
+    transmute(
+      ID = 门诊ID,
+      Age = as.numeric(Age),
+      sex = as.character(性别),
+      sample_group = "Depression-containing non-pure medical records"
+    )
+
+  # 使用原有函数计算样本量、年龄及性别统计，
+  # 加入原来的人口学汇总表。
+  summary_samples <- bind_rows(
+    summary_samples,
+    demo_summary(comorbid_demo, sample_group)
+  )
+
+  # ==================== 9. 导出研究数据及ML数据 ====================
+
+  export_data <- list(
+    Complains_output_depression_pure =
+      Cmp_depression_pure,
+
+    Complains_output_non_depression =
+      Cmp_non_depression,
+
+    # 新增：单独导出共病补充组
+    Complains_output_depression_comorbid =
+      Cmp_depression_comorbid,
+
+    Questionnaire_With_Diagnosis_Label =
+      Questionnaire_With_Diagnosis_Label,
+
+    Questionnaire_Depression_Pure =
+      Questionnaire_Depression_Pure,
+
+    ML_dataset_full_5fold_pure_depression =
+      ml_data
+  )
+
+  for (name in names(export_data)) {
+    write.xlsx(
+      export_data[[name]],
+      file.path(OUTPUT_DIR, paste0(name, ".xlsx")),
+      overwrite = TRUE
+    )
+  }
+
+  write.xlsx(
+    list(
+      Summary_samples = summary_samples,
+      Questionnaire_by_label = summary_questionnaire_by_label,
+      ML_by_label = summary_ml_by_label
+    ),
+    file.path(OUTPUT_DIR, "Demographic_summary_age_sex.xlsx"),
+    overwrite = TRUE
+  )
+
+
+  # ==================== 10. 保存复现信息 ====================
+
+  # 记录输入文件指纹、随机种子和R/包版本，便于追溯。
+  writeLines(
+    c(
+      paste0("Seed: ", seed),
+      "RNG: Mersenne-Twister / Inversion / Rejection",
+      "Fold ordering: ID, C locale",
+      "",
+      "Input file MD5:",
+      capture.output(
+        tools::md5sum(c(state_file, denoised_file))
+      ),
+      "",
+      capture.output(sessionInfo())
+    ),
+    file.path(OUTPUT_DIR, "Export_run_info.txt")
+  )
+
+
+  # ==================== 11. 输出概况 ====================
+
+  cat(
+    "\n单纯抑郁病历：", nrow(Cmp_depression_pure),
+    "\n非抑郁病历：", nrow(Cmp_non_depression),
+    "\n诊断标签问卷：", nrow(Questionnaire_With_Diagnosis_Label),
+    "\n含抑郁但非单纯抑郁病历：", nrow(Cmp_depression_comorbid),
+    "\nML总样本：", nrow(ml_data),
+    "\n其中抑郁：", sum(ml_data$label == 1L),
+    "\n其中非抑郁：", sum(ml_data$label == 0L),
+    "\nML抑郁比例：", round(mean(ml_data$label == 1L), 4),
+    "\n"
+  )
+
+  cat("\n各fold类别数量（0=非抑郁，1=抑郁）：\n")
+  print(table(ml_data$fold, ml_data$label))
+
+  cat("\n各研究样本人口学统计：\n")
+  print(summary_samples)
+
+  cat("\nML按诊断组人口学统计：\n")
+  print(summary_ml_by_label)
+
+  cat("\n数据已导出至：", OUTPUT_DIR, "\n")
+
+  invisible(list(
+    Dep_label = Dep_label,
+    ml_data = ml_data,
+    Cmp_depression_comorbid = Cmp_depression_comorbid,
+    summary_samples = summary_samples,
+    summary_questionnaire_by_label = summary_questionnaire_by_label,
+    summary_ml_by_label = summary_ml_by_label
+  ))
+}
+
+
+# ==================== 执行 ====================
+
+export_result <- run_export()
+
+# 如需在R中查看本次结果：
+# export_result$Dep_label
+# export_result$ml_data
+# export_result$summary_samples
+```
+
+
+
+
+
+
+
